@@ -1,0 +1,12 @@
+{
+  "name": "rozpocet-nazivo",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Lokálny interaktívny rozpočet v dizajne 5PEŇAZÍ",
+  "scripts": {
+    "start": "node server.cjs",
+    "start:lan": "node server.cjs --lan",
+    "test": "node --test tests/*.test.cjs",
+    "check": "node --check engine.js && node --check events.js && node --check year-engine.js && node --check final-content.js && node --check app.js && node --check server.cjs"
+  }
+}
