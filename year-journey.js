@@ -12,6 +12,7 @@
    const featured=moments.reduce((best,e)=>!best||Math.abs(e.amount)>Math.abs(best.amount)?e:best,null);
    result.push({month,endIndex:end.index,date:end.date,checking:end.checking,reserve:end.reserve,future:end.future,debtRemaining:end.debtRemaining||0,
     available:end.checking+end.reserve,firstGap:days.find(day=>day.low<0)?.date||null,
+    surplusReserve:entries.filter(e=>e.surplus&&e.target==='reserve').reduce((sum,e)=>sum+e.amount,0),surplusFuture:entries.filter(e=>e.surplus&&e.target==='future').reduce((sum,e)=>sum+e.amount,0),
     spent:entries.filter(e=>e.amount<0).reduce((sum,e)=>sum-e.amount,0),
     drawn:entries.filter(e=>e.type==='reserveDraw').reduce((sum,e)=>sum+e.amount,0),featured});
   }

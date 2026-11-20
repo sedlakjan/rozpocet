@@ -92,10 +92,11 @@
   return {...run,turbo:{date:snapshot.date,enabled}};
  }
  function reserveMonth(projection,run){
-  if(run.reservePlan||!(projection.monthlyExpenses>0)||!(projection.monthlyReserveSaving>0))return -1;
+  if(run.reservePlan||!(projection.monthlyExpenses>0))return -1;
   for(let month=1;month<11;month++){
    const end=projection.days.filter(day=>day.month===month).at(-1);
-   if(end&&end.checking>=0&&!end.debtRemaining&&end.reserve>=projection.monthlyExpenses*3)return month;
+   const contributing=projection.monthlyReserveSaving>0||projection.ledger.some(e=>e.surplus&&e.target==='reserve'&&e.amount>0&&e.date<=end?.date);
+   if(end&&contributing&&end.checking>=0&&!end.debtRemaining&&end.reserve>=projection.monthlyExpenses*3)return month;
   }
   return -1;
  }

@@ -7,8 +7,8 @@
   const categoryIcons={housing:'home',loans:'coins',phone:'phone',subscription:'play',food:'basket',transport:'bus',outside:'cup',leisure:'star',clothes:'shirt',household:'shield',car:'carShield'};
   const categoryIcon=row=>categoryIcons[row.id]||'other';
   function totals(b){const income=sum(b.income),expenses=sum(b.fixed)+sum(b.consumption)+sum(b.insurance||[]),saving=sum(b.saving)+sum(b.goals);return {income,expenses,saving,left:income-expenses-saving};}
-  function reserveAllocation(b,settings,balances,share=settings?.share||0){
-    const planned=sum(b.saving),cap=(settings?.expenseBase??totals(b).expenses)*6;
+  function reserveAllocation(b,settings,balances,share=settings?.share||0,planned=sum(b.saving)){
+    const base=settings?.expenseBase??totals(b).expenses,cap=base>0?base*6:Infinity;
     const redirected=Math.round(planned*Math.max(0,Math.min(100,share))/100);
     const reserve=Math.min(planned-redirected,Math.max(0,cap-balances.reserve)),extraFuture=planned-reserve;
     return {reserve,future:sum(b.goals)+extraFuture,extraFuture,cap};
@@ -62,7 +62,7 @@
     let checking=E.cents(b.initial.checking)+sum(b.income),reserve=E.cents(b.initial.reserve),future=E.cents(b.initial.future);
     const opening={checking,reserve,future,available:checking+reserve,debtRemaining:0},days=[],ledger=[];let firstDeficit=null,lowest={available:checking+reserve,date:start},shortSaving=0;
     const rescue=plan?null:run.rescue;let loanApplied=false,debtRemaining=0,loanBorrowed=0,loanPaid=0,loanPayments=0;
-    let reserveDailyTotal=0,averageReserve=0,reserveBonus=0,reserveBonusUsed=0;
+    let reserveDailyTotal=0,averageReserve=0,reserveBonus=0,reserveBonusUsed=0,surplusReserve=0,surplusFuture=0;
     const cut=date=>rescue?.kind==='cut'&&date>rescue.date;
     const crisis=date=>!plan&&run.crisis&&date>run.crisis.date;
     const turbo=date=>!plan&&run.turbo?.enabled&&date>run.turbo.date;
@@ -77,7 +77,7 @@
     };
     for(const r of b.income)if(r.amount)record(start,'income',r.name,E.cents(r.amount),{icon:'euro',text:'Januárová mzda už je pripísaná v úvodnom zostatku.'});
     function expense(date,name,amount,type='expense',extra={}){checking-=amount;record(date,type,name,-amount,extra);if(checking<0&&reserve>0){const moved=Math.min(-checking,reserve);checking+=moved;reserve-=moved;record(date,'reserveDraw','Presun z rezervy',moved,{icon:'arrow',text:'Rezerva pokrýva nedostatok na bežnom účte. Spoločný súčet sa nemení.'});}}
-    function transfer(date,name,amount,target){const actual=Math.min(Math.max(0,checking),amount);checking-=actual;if(target==='reserve')reserve+=actual;else future+=actual;shortSaving+=amount-actual;record(date,'transfer',name,actual,{target,planned:amount,icon:'arrow',text:`Presun medzi vlastnými zostatkami. ${actual<amount?'Časť presunu sa pre nedostatok nevykonala.':''}`});}
+    function transfer(date,name,amount,target,extra={}){const actual=Math.min(Math.max(0,checking),amount);checking-=actual;if(target==='reserve')reserve+=actual;else future+=actual;shortSaving+=amount-actual;record(date,'transfer',name,actual,{target,planned:amount,icon:'arrow',text:`Presun medzi vlastnými zostatkami. ${actual<amount?'Časť presunu sa pre nedostatok nevykonala.':''}`,...extra});return actual;}
     for(let i=0;i<count;i++){
       const date=E.addDays(start,i),m=Number(date.slice(5,7))-1,d=Number(date.slice(8)),monthDays=new Date(Date.UTC(year,m+1,0)).getUTCDate(),offset=ledger.length;
       if(d===1&&m>0)for(const r of b.income)if(r.amount){checking+=E.cents(r.amount);record(date,'income',r.name,E.cents(r.amount),{icon:'euro',text:'Pravidelný príjem na bežný účet.'});}
@@ -108,6 +108,16 @@
         else expense(date,event.name,Math.round(E.cents(event.amount)*(cut(date)&&event.type==='deviation'?.9:1)),event.type,{icon:event.icon,text:event.text,eventId:event.id});
       }
       if(d===28)for(const r of b.goals)transfer(date,r.name,E.cents(r.amount),'future');
+      if(d===monthDays&&(cut(date)||crisis(date)||turbo(date))){
+        // Keep an account cushion and cash covering the outstanding loan.
+        const surplus=Math.max(0,checking-10000-debtRemaining);
+        if(surplus){
+          const settings=run.reservePlan&&date>run.reservePlan.date?run.reservePlan:{share:10,expenseBase:totals(b).expenses};
+          const allocation=reserveAllocation(b,settings,{reserve},settings.share,surplus);
+          if(allocation.reserve)surplusReserve+=transfer(date,'Prebytok do rezervy',allocation.reserve,'reserve',{surplus:true});
+          if(allocation.extraFuture)surplusFuture+=transfer(date,'Prebytok na budúcnosť',allocation.extraFuture,'future',{surplus:true});
+        }
+      }
       // The annual reward uses daily closing reserves before the reward itself.
       reserveDailyTotal+=reserve;
       if(i===count-1){
@@ -123,7 +133,7 @@
     const deviation=ledger.filter(e=>e.type==='deviation').reduce((n,e)=>n-e.amount,0);
     const life=plan?0:run.events.filter(e=>['life','temptation'].includes(e.type)&&!isInsured(e,b)).reduce((n,e)=>n+E.cents(e.amount),0);
     const extra=plan?0:run.events.filter(e=>e.type==='extraIncome').reduce((n,e)=>n+E.cents(e.amount),0);
-    return {opening,days,ledger,lowest,firstDeficit,shortSaving,deviation,life,extra,monthlyExpenses:totals(b).expenses,monthlyReserveSaving:sum(b.saving),averageReserve,reserveBonus,reserveBonusUsed,loanBorrowed,loanPaid,debtRemaining,loanCost:loanApplied?rescue.cost:0,insured:plan?0:run.events.filter(e=>isInsured(e,b)).reduce((n,e)=>n+E.cents(e.amount),0),final:days.at(-1)};
+    return {opening,days,ledger,lowest,firstDeficit,shortSaving,deviation,life,extra,monthlyExpenses:totals(b).expenses,monthlyReserveSaving:sum(b.saving),surplusReserve,surplusFuture,averageReserve,reserveBonus,reserveBonusUsed,loanBorrowed,loanPaid,debtRemaining,loanCost:loanApplied?rescue.cost:0,insured:plan?0:run.events.filter(e=>isInsured(e,b)).reduce((n,e)=>n+E.cents(e.amount),0),final:days.at(-1)};
   }
   function isInsured(event,b){return !!event.insurance&&(b.insurance||[]).some(p=>p.id===event.insurance&&p.amount>0);}
   const api={categoryIcon,isInsured,defaults,totals,reserveAllocation,generate,simulate,applies};if(typeof module!=='undefined')module.exports=api;root.YearEngine=api;
