@@ -357,7 +357,7 @@
   const balances=`<p class="year-choice-balances">Na účte <strong>${money(snapshot.checking)}</strong><span>Rezerva ${money(snapshot.reserve)}</span><span class="year-choice-protected">Na budúcnosť ${money(snapshot.future)} · ostáva bokom</span></p>`;
   if(checkpoint.kind==='purchase'){
    const item=YearChoices.offer(snapshot,run,checkpoint.eventId),number=run.events.filter(e=>e.decision&&e.decision!=='pending').length+1,total=run.events.filter(e=>e.decision).length;
-   dialog.innerHTML=`<span class="eyebrow">TERAZ ROZHODUJEŠ TY · ${number} / ${total}</span><span class="year-choice-icon">${icon(item.icon,32)}</span><h2 id="year-decision-title">${esc(item.title)}</h2><p>${esc(item.text)}</p><strong class="year-choice-price">${money(E.cents(item.amount))}</strong>${balances}<div class="year-choice-impact ${item.canBuy?'':'is-empty'}">${item.canBuy?`<p>Po kúpe zostane na účte: <strong>${money(item.afterChecking)}</strong></p>${item.reserveDraw?`<p class="year-reserve-impact">Z rezervy ti ubudne <strong>${money(item.reserveDraw)}</strong>.<small>Rezerva po kúpe: ${money(item.afterReserve)}.</small></p>`:''}`:''}</div><div class="year-choice-actions"><button class="button primary" data-action="year-buy">Áno, kúpiť</button><button class="button year-choice-no" data-action="year-decline">Teraz nie</button></div>`;
+   dialog.innerHTML=`<span class="eyebrow">TERAZ ROZHODUJEŠ TY · ${number} / ${total}</span><span class="year-choice-icon">${icon(item.icon,32)}</span><h2 id="year-decision-title">${esc(item.title)}</h2><p>${esc(item.text)}</p><strong class="year-choice-price">${money(E.cents(item.amount))}</strong>${balances}<div class="year-choice-impact ${item.canBuy?'':'is-empty'}">${item.canBuy?`<p>Po kúpe zostane na účte: <strong>${money(item.afterChecking)}</strong></p>${item.reserveDraw?`<p class="year-reserve-impact">Z rezervy ti ubudne <strong>${money(item.reserveDraw)}</strong>.<small>Rezerva po kúpe: ${money(item.afterReserve)}.</small></p>`:''}`:''}</div><div class="year-choice-actions"><span class="year-buy-wrap"><button class="button primary" data-action="year-buy">Áno, kúpiť</button><span class="year-money-tooltip" id="year-money-tooltip" role="tooltip" hidden></span></span><button class="button year-choice-no" data-action="year-decline">Teraz nie</button></div>`;
   }else if(checkpoint.kind==='reserve'){
    yearDecision.reserveShare=50;
    const monthsCovered=snapshot.reserve/projection.monthlyExpenses,atCap=monthsCovered>=6;
@@ -387,9 +387,9 @@
   if(!yearDecision)return;
   const {kind,eventId,snapshot}=yearDecision;
   if(kind==='purchase'&&answer&&!YearChoices.offer(snapshot,run,eventId).canBuy){
-   const item=YearChoices.offer(snapshot,run,eventId);
-   $('#year-decision').innerHTML=`<span class="eyebrow">TENTO NÁKUP TERAZ NEPREJDE</span><h2 id="year-decision-title">Nemáme peniaze, musíme šetriť.</h2><p class="year-no-money-alert" role="alert">Na nákup za ${money(E.cents(item.amount))} teraz účet ani rezerva nestačia.</p><p>Peniaze na budúcnosť ostávajú bokom. Nákup sa neuskutočnil.</p><button class="button year-choice-no year-blocked-confirm" data-action="year-decline" autofocus>Rozumiem, teraz nie</button>`;
-   $('#year-decision [data-action="year-decline"]')?.focus();return;
+   const tip=$('#year-money-tooltip'),button=$('#year-decision [data-action="year-buy"]');
+   tip.textContent='Nemáme peniaze, musíme šetriť.';tip.hidden=false;
+   button.setAttribute('aria-describedby','year-money-tooltip');button.focus();return;
   }
   if(kind==='purchase'&&answer&&run.turbo?.enabled&&snapshot.date>run.turbo.date&&!yearDecision.confirmed){
    yearDecision.confirmed=true;
