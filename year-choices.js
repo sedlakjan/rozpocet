@@ -63,7 +63,7 @@
   let streak=0;
   for(let month=0;month<12;month++){
    const end=projection.days.filter(day=>day.month===month).at(-1);if(!end)continue;
-   streak=end.available<=-100000?streak+1:0;if(streak===3)return month;
+   streak=end.available<0?streak+1:0;if(streak===2)return month;
   }
   return -1;
  }
@@ -74,7 +74,7 @@
   return {before,after};
  }
  function activateCrisis(run,snapshot){
-  if(run.crisis||(snapshot.available??snapshot.checking+snapshot.reserve)>-100000)return run;
+  if(run.crisis||(snapshot.available??snapshot.checking+snapshot.reserve)>=0)return run;
   return {...run,crisis:{date:snapshot.date,joyFactor:.3}};
  }
  function turboMonth(projection,run){
