@@ -7,6 +7,12 @@
   const categoryIcons={housing:'home',loans:'coins',phone:'phone',subscription:'play',food:'basket',transport:'bus',outside:'cup',leisure:'star',clothes:'shirt',household:'shield',car:'carShield'};
   const categoryIcon=row=>categoryIcons[row.id]||'other';
   function totals(b){const income=sum(b.income),expenses=sum(b.fixed)+sum(b.consumption)+sum(b.insurance||[]),saving=sum(b.saving)+sum(b.goals);return {income,expenses,saving,left:income-expenses-saving};}
+  function reserveAllocation(b,settings,balances,share=settings?.share||0){
+    const planned=sum(b.saving),cap=(settings?.expenseBase??totals(b).expenses)*6;
+    const redirected=Math.round(planned*Math.max(0,Math.min(100,share))/100);
+    const reserve=Math.min(planned-redirected,Math.max(0,cap-balances.reserve)),extraFuture=planned-reserve;
+    return {reserve,future:sum(b.goals)+extraFuture,extraFuture,cap};
+  }
   function rng(seed){let x=seed>>>0;return()=>{x+=0x6D2B79F5;let t=Math.imul(x^x>>>15,1|x);t^=t+Math.imul(t^t>>>7,61|t);return((t^t>>>14)>>>0)/4294967296;};}
   function applies(c,b){const all=[...b.fixed,...b.consumption,...(b.insurance||[])];if(c.condition==='always')return true;if(c.condition==='car')return all.some(r=>/auto|benzín|nafta|servis/i.test(r.name)&&r.amount>0);if(c.condition==='pet')return all.some(r=>/miláčik|pes|mačka|veterin/i.test(r.name)&&r.amount>0);if(c.condition==='bike')return all.some(r=>/bicykel|cyklo/i.test(r.name)&&r.amount>0);if(c.condition==='children')return all.some(r=>/deti|dieťa|škola|krúž/i.test(r.name)&&r.amount>0);return all.some(r=>r.id===c.condition&&r.amount>0);}
   function generate(b,answer,seed,year=2027){
@@ -54,37 +60,71 @@
   function simulate(b,run,{plan=false}={}){
     const year=run.year,start=`${year}-01-01`,end=`${year}-12-31`,count=E.diffDays(start,end)+1;
     let checking=E.cents(b.initial.checking)+sum(b.income),reserve=E.cents(b.initial.reserve),future=E.cents(b.initial.future);
-    const opening={checking,reserve,future,available:checking+reserve},days=[],ledger=[];let firstDeficit=null,lowest={available:checking+reserve,date:start},shortSaving=0;
-    const record=(date,type,name,amount,extra={})=>{const e={date,type,name,amount,...extra,checking,reserve,future,available:checking+reserve};ledger.push(e);if(e.available<lowest.available)lowest={available:e.available,date};if(e.available<0&&!firstDeficit)firstDeficit=date;return e;};
+    const opening={checking,reserve,future,available:checking+reserve,debtRemaining:0},days=[],ledger=[];let firstDeficit=null,lowest={available:checking+reserve,date:start},shortSaving=0;
+    const rescue=plan?null:run.rescue;let loanApplied=false,debtRemaining=0,loanBorrowed=0,loanPaid=0,loanPayments=0;
+    let reserveDailyTotal=0,averageReserve=0,reserveBonus=0,reserveBonusUsed=0;
+    const cut=date=>rescue?.kind==='cut'&&date>rescue.date;
+    const crisis=date=>!plan&&run.crisis&&date>run.crisis.date;
+    const turbo=date=>!plan&&run.turbo?.enabled&&date>run.turbo.date;
+    const record=(date,type,name,amount,extra={})=>{
+      const e={date,type,name,amount,...extra,checking,reserve,future,available:checking+reserve,debtRemaining};ledger.push(e);
+      if(e.available<lowest.available)lowest={available:e.available,date};if(e.available<0&&!firstDeficit)firstDeficit=date;
+      if(rescue?.kind==='loan'&&!loanApplied&&date>=rescue.date&&e.available<0&&reserve===0){
+        loanApplied=true;loanBorrowed=E.cents(rescue.principal);checking+=loanBorrowed;debtRemaining=rescue.total;
+        record(date,'loan','Pôžička na bežný účet',loanBorrowed,{icon:'coins',text:'Požičané peniaze, nie zárobok. Splácanie začína budúci mesiac.'});
+      }
+      return e;
+    };
     for(const r of b.income)if(r.amount)record(start,'income',r.name,E.cents(r.amount),{icon:'euro',text:'Januárová mzda už je pripísaná v úvodnom zostatku.'});
     function expense(date,name,amount,type='expense',extra={}){checking-=amount;record(date,type,name,-amount,extra);if(checking<0&&reserve>0){const moved=Math.min(-checking,reserve);checking+=moved;reserve-=moved;record(date,'reserveDraw','Presun z rezervy',moved,{icon:'arrow',text:'Rezerva pokrýva nedostatok na bežnom účte. Spoločný súčet sa nemení.'});}}
     function transfer(date,name,amount,target){const actual=Math.min(Math.max(0,checking),amount);checking-=actual;if(target==='reserve')reserve+=actual;else future+=actual;shortSaving+=amount-actual;record(date,'transfer',name,actual,{target,planned:amount,icon:'arrow',text:`Presun medzi vlastnými zostatkami. ${actual<amount?'Časť presunu sa pre nedostatok nevykonala.':''}`});}
     for(let i=0;i<count;i++){
       const date=E.addDays(start,i),m=Number(date.slice(5,7))-1,d=Number(date.slice(8)),monthDays=new Date(Date.UTC(year,m+1,0)).getUTCDate(),offset=ledger.length;
       if(d===1&&m>0)for(const r of b.income)if(r.amount){checking+=E.cents(r.amount);record(date,'income',r.name,E.cents(r.amount),{icon:'euro',text:'Pravidelný príjem na bežný účet.'});}
+      if(d===2&&loanApplied&&date.slice(0,7)>rescue.date.slice(0,7)&&debtRemaining>0&&loanPayments<rescue.term){
+        loanPayments++;const amount=loanPayments===rescue.term?debtRemaining:Math.min(debtRemaining,rescue.payment);
+        debtRemaining-=amount;loanPaid+=amount;expense(date,'Splátka hernej pôžičky',amount,'loanPayment',{icon:'coins',text:'Mesačná splátka znižuje peniaze aj zostávajúci dlh.'});
+      }
+      if(d===1){
+        if(!plan&&run.reservePlan&&date>run.reservePlan.date){
+          const allocation=reserveAllocation(b,run.reservePlan,{reserve});
+          if(allocation.reserve)transfer(date,'Do rezervy',allocation.reserve,'reserve');
+          if(allocation.extraFuture)transfer(date,'Presmerované na budúcnosť',allocation.extraFuture,'future');
+        }else for(const r of b.saving)transfer(date,r.name,E.cents(r.amount),'reserve');
+      }
       if(d===12)for(const r of b.irregular.filter(r=>r.month===m))if(r.amount){checking+=E.cents(r.amount);record(date,'income',r.name,E.cents(r.amount),{icon:'gift',text:'Vopred zadaný nepravidelný príjem.'});}
-      if(d===5)for(const r of [...b.fixed,...(b.insurance||[])])if(r.amount)expense(date,r.name,E.cents(r.amount),'expense',{icon:categoryIcon(r),categoryId:r.id,categoryName:categoryIcons[r.id]?r.name:'Iné navyše',text:'Pravidelný výdavok zo zadaného rozpočtu.'});
+      if(d===6)for(const r of [...b.fixed,...(b.insurance||[])])if(r.amount)expense(date,r.name,E.cents(r.amount),'expense',{icon:categoryIcon(r),categoryId:r.id,categoryName:categoryIcons[r.id]?r.name:'Iné navyše',text:'Pravidelný výdavok zo zadaného rozpočtu.'});
       if(d===18)for(const r of b.known.filter(r=>r.month===m&&!r.included))if(r.amount)expense(date,r.name,E.cents(r.amount),'known',{icon:'other',categoryId:r.id,categoryName:'Iné navyše',text:'Známy jednorazový výdavok. Neúčtuje sa v inej kategórii.'});
       for(const row of b.consumption){
-        const daily=Math.round(E.cents(row.amount)*d/monthDays)-Math.round(E.cents(row.amount)*(d-1)/monthDays);
+        const monthly=Math.round(E.cents(row.amount)*(['outside','clothes','leisure'].includes(row.id)?turbo(date)?0:crisis(date)?.3:cut(date)?.9:1:1));
+        const daily=Math.round(monthly*d/monthDays)-Math.round(monthly*(d-1)/monthDays);
         if(daily)expense(date,row.name,daily,'daily',{icon:categoryIcon(row),categoryId:row.id,categoryName:categoryIcons[row.id]?row.name:'Iné navyše',text:'Denná časť mesačného plánu tejto kategórie.'});
       }
       if(!plan)for(const event of run.events.filter(e=>e.date===date)){
-        if(isInsured(event,b))record(date,'insured',event.name,0,{icon:event.icon,text:'Pokrýva modelové poistenie. Dopad 0 €.',eventId:event.id,insuredAmount:E.cents(event.amount)});
+        if(crisis(date)&&event.type==='deviation')record(date,'covered','Nákup nad plán vynechaný',0,{icon:event.icon,text:'Úsporný režim zastavil ďalšie automatické nákupy navyše.',eventId:event.id});
+        else if(isInsured(event,b))record(date,'insured',event.name,0,{icon:event.icon,text:'Pokrýva modelové poistenie. Dopad 0 €.',eventId:event.id,insuredAmount:E.cents(event.amount)});
         else if(event.type==='covered'||event.included)record(date,'covered',event.name,0,{...event,amount:0,text:event.text});
         else if(event.type==='extraIncome'){checking+=E.cents(event.amount);record(date,event.type,event.name,E.cents(event.amount),{icon:event.icon,text:event.text,eventId:event.id});}
-        else expense(date,event.name,E.cents(event.amount),event.type,{icon:event.icon,text:event.text,eventId:event.id});
+        else expense(date,event.name,Math.round(E.cents(event.amount)*(cut(date)&&event.type==='deviation'?.9:1)),event.type,{icon:event.icon,text:event.text,eventId:event.id});
       }
-      if(d===27)for(const r of b.saving)transfer(date,r.name,E.cents(r.amount),'reserve');
       if(d===28)for(const r of b.goals)transfer(date,r.name,E.cents(r.amount),'future');
+      // The annual reward uses daily closing reserves before the reward itself.
+      reserveDailyTotal+=reserve;
+      if(i===count-1){
+        averageReserve=reserveDailyTotal/count;reserveBonus=Math.round(averageReserve*.01);
+        if(reserveBonus>0){
+          reserve+=reserveBonus;record(date,'reserveBonus','Ročný bonus banky k rezerve',reserveBonus,{icon:'shield',text:'Modelový bonus: 1 % z priemerného denného zostatku rezervy za rok.'});
+          if(checking<0){reserveBonusUsed=Math.min(-checking,reserveBonus);checking+=reserveBonusUsed;reserve-=reserveBonusUsed;record(date,'reserveDraw','Bonus z rezervy pokryl mínus',reserveBonusUsed,{icon:'arrow',text:'Bonus je vlastný príjem rezervy. Pri nedostatku pomohol účtu; budúcnosť sa nečerpá.'});}
+        }
+      }
       const movements=ledger.slice(offset);const available=checking+reserve;
-      days.push({date,index:i,month:m,day:d,checking,reserve,future,available,checkingLow:Math.min(checking,...movements.map(e=>e.checking+Math.min(Math.max(0,-e.checking),e.reserve))),low:Math.min(available,...movements.map(e=>e.available)),events:movements});
+      days.push({date,index:i,month:m,day:d,checking,reserve,future,available,debtRemaining,netAvailable:available-debtRemaining,checkingLow:Math.min(checking,...movements.map(e=>e.checking+Math.min(Math.max(0,-e.checking),e.reserve))),low:Math.min(available,...movements.map(e=>e.available)),events:movements});
     }
-    const deviation=plan?0:run.events.filter(e=>e.type==='deviation'&&!e.included).reduce((n,e)=>n+E.cents(e.amount),0);
+    const deviation=ledger.filter(e=>e.type==='deviation').reduce((n,e)=>n-e.amount,0);
     const life=plan?0:run.events.filter(e=>['life','temptation'].includes(e.type)&&!isInsured(e,b)).reduce((n,e)=>n+E.cents(e.amount),0);
     const extra=plan?0:run.events.filter(e=>e.type==='extraIncome').reduce((n,e)=>n+E.cents(e.amount),0);
-    return {opening,days,ledger,lowest,firstDeficit,shortSaving,deviation,life,extra,insured:plan?0:run.events.filter(e=>isInsured(e,b)).reduce((n,e)=>n+E.cents(e.amount),0),final:days.at(-1)};
+    return {opening,days,ledger,lowest,firstDeficit,shortSaving,deviation,life,extra,monthlyExpenses:totals(b).expenses,monthlyReserveSaving:sum(b.saving),averageReserve,reserveBonus,reserveBonusUsed,loanBorrowed,loanPaid,debtRemaining,loanCost:loanApplied?rescue.cost:0,insured:plan?0:run.events.filter(e=>isInsured(e,b)).reduce((n,e)=>n+E.cents(e.amount),0),final:days.at(-1)};
   }
   function isInsured(event,b){return !!event.insurance&&(b.insurance||[]).some(p=>p.id===event.insurance&&p.amount>0);}
-  const api={categoryIcon,isInsured,defaults,totals,generate,simulate,applies};if(typeof module!=='undefined')module.exports=api;root.YearEngine=api;
+  const api={categoryIcon,isInsured,defaults,totals,reserveAllocation,generate,simulate,applies};if(typeof module!=='undefined')module.exports=api;root.YearEngine=api;
 })(typeof window==='undefined'?globalThis:window);

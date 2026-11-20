@@ -8,9 +8,10 @@
   const drawn=sum('reserveDraw'),saved=entries.filter(e=>e.type==='transfer'&&e.target==='reserve').reduce((n,e)=>n+e.amount,0);
   const firstGap=projection.days.slice(0,31).find(day=>day.checkingLow<0);
   const outcome=firstGap?'gap':drawn?'reserve':'own';
-  const reserveChange=end.reserve-projection.opening.reserve;
+  const reserveChange=end.reserve-projection.opening.reserve,futureChange=end.future-projection.opening.future;
+  const savedFuture=entries.filter(e=>e.type==='transfer'&&e.target==='future').reduce((n,e)=>n+e.amount,0);
   const tone=firstGap||reserveChange<0?'red':drawn?'yellow':'green';
-  return {end,drawn,saved,reserveChange,tone,firstGap:firstGap?.date||null,outcome,
+  return {end,drawn,saved,savedFuture,reserveChange,futureChange,tone,firstGap:firstGap?.date||null,outcome,
    overspending:sum('deviation'),life:sum('life')+sum('temptation'),
    wealthChange:total(end)-total(projection.opening),
    plannedSaving:entries.filter(e=>e.type==='transfer'&&e.target==='reserve').reduce((n,e)=>n+e.planned,0)};

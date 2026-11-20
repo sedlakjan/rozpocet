@@ -18,6 +18,12 @@
 @media(prefers-reduced-motion:reduce){.flying-payment{animation:none;position:relative;bottom:auto;box-shadow:none}.month-scene .payment-stream{mask-image:none;display:flex;align-items:center;justify-content:center}.flying-payment{width:100%}}
 
 /* Character setup */
+#screen-navigation{display:flex;align-items:center;gap:12px;margin:22px 0}
+#screen-navigation:empty{display:none}
+#screen-navigation>.button{border-radius:999px;background:#f0f2f4;border-color:transparent}
+#screen-navigation>.button:is(:hover,:focus-visible){background:#e0e5eb}
+.screen-forward{margin-left:auto}
+@media(max-width:700px){#screen-navigation>.button{min-height:44px;padding:10px 18px}}
 .final-actions{flex-wrap:wrap}
 .final-actions>.button.secondary{background:#f0f2f4;border-color:transparent;color:#092b50}
 .final-actions>.button.secondary:is(:hover,:focus-visible){background:#e0e5eb}
@@ -62,6 +68,28 @@
 .month-sticker.is-paid{background:#e8f3ed;border-color:#bbd8cb}
 .sticker-check{margin-left:auto;color:#27765d}
 .sticker-flight{position:fixed;z-index:1000;pointer-events:none;box-sizing:border-box}
+.stickers-active{align-self:stretch}
+.month-stickers:empty{display:none}
+@media(max-width:700px){
+  .ring-stage:has(.stickers-active:not(:empty)){position:relative;padding-right:92px}
+  .ring-stage .stickers-active{
+    position:absolute;right:0;top:43px;width:84px;display:grid;gap:9px;margin:0;
+  }
+  .stickers-active .month-sticker{
+    flex:none;display:flex;flex-direction:column;align-items:flex-start;gap:5px;
+    padding:8px 6px;border-radius:12px;box-shadow:2px 3px 0 #092b500e;
+    rotate:2deg;
+  }
+  .stickers-active .month-sticker:nth-child(2){rotate:-2deg}
+  .stickers-active .month-sticker strong{font-size:10px;line-height:1.3;overflow-wrap:anywhere}
+  .stickers-active .month-sticker small{font-size:9px;line-height:1.3}
+  .stickers-active .sticker-check{position:absolute;right:5px;top:8px}
+  .stickers-active .month-sticker.is-paid{position:relative}
+  .stickers-active .month-sticker>span:first-child{flex-basis:28px;height:28px;width:28px}
+  .ring-stage:has(.stickers-active:not(:empty)) .money-ring{width:100%;min-width:0}
+  .ring-stage:has(.stickers-active:not(:empty)) .money-ring strong{font-size:clamp(25px,8vw,34px)}
+  .ring-stage:has(.stickers-active:not(:empty)) .money-ring small{font-size:9px}
+}
 body:has(.character-settings){
   background:radial-gradient(ellipse at 16% 240px,#eaf0ff,transparent 52%),#f7f8fc;
 }
@@ -99,6 +127,18 @@ body:has(.character-settings){
   margin-top:14px;padding-top:14px;border-top:1px solid #e2e8f1;
 }
 .character-settings .character-reserve output{color:#305bd5}
+.profile-summary .character-insurance{
+  display:flex;align-items:center;gap:10px;min-height:44px;margin:14px 0 0;
+  padding-top:12px;border-top:1px solid #e2e8f1;font-size:13px;cursor:pointer;
+}
+.profile-summary .character-insurance input{
+  display:block;flex:0 0 20px;width:20px;height:20px;min-height:0;
+  padding:0;margin:0;accent-color:#305bd5;
+}
+.character-insurance>span{display:flex;flex:1;justify-content:space-between;gap:8px}
+.character-insurance strong{white-space:nowrap}
+.allocation-bar .insurance{background:#b8a4ef}
+.allocation-icon.insurance{color:#b8a4ef}
 .character-settings .reserve-readout{display:flex;align-items:center;gap:10px;min-height:36px}
 .character-settings .reserve-shield{
   display:grid;place-items:center;flex:0 0 36px;height:36px;color:#27765d;

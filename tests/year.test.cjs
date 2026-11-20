@@ -8,8 +8,8 @@ const run=events=>({year:2027,seed:123,answer:6,events});
 test('presuny zachovávajú peniaze, sporenie nie je spotreba',()=>{
  const b=empty();b.initial.checking=100;b.saving[0].amount=40;b.goals[0].amount=30;
  const p=Y.simulate(b,run([]));let prev=p.opening;
- for(const e of p.ledger){assert.equal(e.checking+e.reserve+e.future,10000);if(e.type==='transfer'&&e.target==='reserve')assert.equal(e.available,prev.available);prev=e;}
- assert.equal(p.final.future,3000);assert.equal(p.final.reserve,7000);assert.ok(p.shortSaving>0);
+ let wealth=10000;for(const e of p.ledger){if(e.type==='reserveBonus')wealth+=e.amount;assert.equal(e.checking+e.reserve+e.future,wealth);if(e.type==='transfer'&&e.target==='reserve')assert.equal(e.available,prev.available);prev=e;}
+ assert.equal(p.final.future,3000);assert.equal(p.final.reserve,7000+p.reserveBonus);assert.ok(p.shortSaving>0);
 });
 test('zahrnutá udalosť a označená známa platba sa neúčtujú dvakrát',()=>{
  const b=empty();b.initial.checking=100;b.known=[{id:'x',name:'Poistka',amount:50,month:0,included:true}];
@@ -19,7 +19,7 @@ test('zahrnutá udalosť a označená známa platba sa neúčtujú dvakrát',()=
 test('čerpanie a vyčerpanie rezervy, budúce ciele sa nepoužijú',()=>{
  const b=empty();b.initial={checking:10,reserve:30,future:200};
  const p=Y.simulate(b,run([{date:'2027-01-10',type:'life',name:'Oprava',amount:70}]));
- assert.equal(p.final.checking,-3000);assert.equal(p.final.reserve,0);assert.equal(p.final.future,20000);assert.equal(p.firstDeficit,'2027-01-10');assert.equal(p.ledger.find(e=>e.type==='reserveDraw').amount,3000);
+ assert.equal(p.final.checking,-3000+p.reserveBonusUsed);assert.equal(p.final.reserve,0);assert.equal(p.final.future,20000);assert.equal(p.firstDeficit,'2027-01-10');assert.equal(p.ledger.find(e=>e.type==='reserveDraw').amount,3000);
 });
 test('príjem najskôr pokryje deficit, odkladanie nevytvorí dlh',()=>{
  const b=empty();b.income[0].amount=100;b.saving[0].amount=50;
@@ -40,10 +40,10 @@ test('životné udalosti sú nezávislé od odpovede, auto a deti sú podmienen�
  const b=Y.defaults(),a=Y.generate(b,1,99),z=Y.generate(b,6,99);const life=r=>r.events.filter(e=>['life','extraIncome'].includes(e.type)&&!e.id.endsWith('-situation')&&!e.date.startsWith('2027-01'));assert.deepEqual(life(a),life(z));assert.ok(z.events.some(e=>e.date.startsWith('2027-01')&&e.type==='life'&&e.amount>0));assert.equal(z.deviationTotal,0);assert.ok(!a.events.some(e=>['car','children'].includes(e.condition)));assert.ok(C.catalog.length>=30);
 });
 test('ročné percento je účtované iba konkrétnymi udalosťami',()=>{
- const b=Y.defaults(),r=Y.generate(b,1,76),p=Y.simulate(b,r),base=Y.simulate(b,r,{plan:true});const expected=Math.round(b.consumption.reduce((n,e)=>n+E.cents(e.amount),0)*.2*12);assert.equal(p.deviation,expected);assert.equal(p.final.available+p.final.future-base.final.available-base.final.future,p.extra-p.life-p.deviation);
+ const b=Y.defaults(),r=Y.generate(b,1,76),p=Y.simulate(b,r),base=Y.simulate(b,r,{plan:true});const expected=Math.round(b.consumption.reduce((n,e)=>n+E.cents(e.amount),0)*.2*12);assert.equal(p.deviation,expected);assert.equal(p.final.available+p.final.future-base.final.available-base.final.future,p.extra-p.life-p.deviation+p.reserveBonus-base.reserveBonus);
 });
 test('nulové vstupy aj deficitný rozpočet majú konečný výsledok',()=>{
- const b=empty();assert.equal(Y.simulate(b,run([])).final.available,0);b.fixed[0].amount=100;const p=Y.simulate(b,run([]));assert.equal(p.final.available,-120000);assert.equal(p.firstDeficit,'2027-01-05');assert.equal(p.final.future,0);
+ const b=empty();assert.equal(Y.simulate(b,run([])).final.available,0);b.fixed[0].amount=100;const p=Y.simulate(b,run([]));assert.equal(p.final.available,-120000);assert.equal(p.firstDeficit,'2027-01-06');assert.equal(p.final.future,0);
 });
 test('grafové minimá zachovávajú pokles pred neskorším príjmom',()=>{
  const b=empty();b.income[0].amount=100;b.known=[{name:'Platba',amount:300,month:0}];const p=Y.simulate(b,run([]));assert.ok(p.lowest.available<p.final.available);assert.ok(p.days.some(d=>d.low<0));
@@ -83,7 +83,7 @@ test('posledná januárová situácia sa žrebuje, rovnaký seed ju zachová',()
 });
 test('zmena poistenia nemení udalosti a účty sa stále zhodujú s plánom',()=>{
  const b=Y.defaults(),r=Y.generate(b,1,99),saved=structuredClone(r);b.insurance[0].amount=15;
- const p=Y.simulate(b,r),base=Y.simulate(b,r,{plan:true});assert.deepEqual(r,saved);assert.equal(p.final.available+p.final.future-base.final.available-base.final.future,p.extra-p.life-p.deviation);
+ const p=Y.simulate(b,r),base=Y.simulate(b,r,{plan:true});assert.deepEqual(r,saved);assert.equal(p.final.available+p.final.future-base.final.available-base.final.future,p.extra-p.life-p.deviation+p.reserveBonus-base.reserveBonus);
  assert.ok(!r.events.some(e=>['pet','bike','car'].includes(e.condition)));
 });
 test('január mení počet mínusov podľa škály a žrebuje aj poradie nákupov',()=>{

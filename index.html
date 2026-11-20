@@ -16,6 +16,7 @@
   <link rel="stylesheet" href="receipt.css">
   <link rel="stylesheet" href="journey.css">
   <link rel="stylesheet" href="flow.css">
+  <link rel="stylesheet" href="year-journey.css">
   <script src="engine.js" defer></script>
   <script src="events.js" defer></script>
   <script src="year-engine.js" defer></script>
@@ -24,6 +25,9 @@
   <script src="receipt.js" defer></script>
   <script src="receipt-counter.js" defer></script>
   <script src="journey-insights.js" defer></script>
+  <script src="year-journey.js" defer></script>
+  <script src="year-motion.js" defer></script>
+  <script src="year-choices.js" defer></script>
   <script src="simulation-sound.js" defer></script>
   <script src="app.js" defer></script>
 </head>
@@ -35,6 +39,7 @@
       <span class="brand-divider"></span><span class="product-name">Rozpočet naživo</span>
     </header>
     <main id="journey"></main>
+    <nav id="screen-navigation" aria-label="Prejdené obrazovky"></nav>
     <footer>
       <span>Rozumieť peniazom sa dá aj skúsenosťou.</span>
       <div><span class="footer-dot"></span> Všetky výpočty prebiehajú v tvojom prehliadači<button data-action="privacy">Súkromie</button></div>
@@ -45,6 +50,7 @@
   <dialog id="character-picker" aria-labelledby="character-picker-title"></dialog>
   <dialog id="event-reveal" class="event-reveal" aria-labelledby="reveal-title"></dialog>
   <dialog id="year-intro" class="year-intro" aria-labelledby="year-intro-title"></dialog>
+  <dialog id="year-decision" class="year-decision" aria-labelledby="year-decision-title"></dialog>
   <div id="toast" class="toast" role="status"></div>
   <noscript><p>Na spustenie interaktívneho rozpočtu povoľ JavaScript. Údaje zostávajú v prehliadači.</p></noscript>
 </body>
