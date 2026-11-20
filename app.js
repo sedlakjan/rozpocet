@@ -3,25 +3,187 @@
  const E=BudgetEngine,Y=YearEngine,$=s=>document.querySelector(s),esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
  const money=n=>new Intl.NumberFormat('sk-SK',{style:'currency',currency:'EUR',maximumFractionDigits:n%100?2:0}).format(n/100),date=s=>new Intl.DateTimeFormat('sk-SK',{day:'numeric',month:'long',timeZone:'UTC'}).format(E.parseDate(s));
  const months=['Január','Február','Marec','Apríl','Máj','Jún','Júl','August','September','Október','November','December'];
+ const presets=[{id:'enjoy',name:'Žijem pre dnešok',text:'Viac radostí, menej plánovania',discipline:2,future:10},{id:'balance',name:'Zlatá stredná cesta',text:'Niečo dnes, niečo na neskôr',discipline:4,future:50},{id:'planner',name:'Myslím dopredu',text:'Držím plán a tvorím rezervu',discipline:6,future:90}];
+ const characterAnswers=['Takmer nikdy.','Zriedka.','Občas.','Často.','Takmer vždy.','Vždy.'];
  const answers=['Takmer vôbec.','Väčšinou sa ho nedržia.','Skôr sa ho nedržia.','Skôr sa ho držia.','Väčšinou sa ho držia.','Takmer vždy.'];
  const paths={coins:'M5 4h14v5H5V4Zm2 5v5h14V9M3 14h14v6H3v-6m4 3h6',shirt:'m8 3 4 2 4-2 6 6-4 3-2-3v12H8V9l-2 3-4-3 6-6Z',shield:'m12 2 9 4v6c0 5-9 10-9 10S3 17 3 12V6l9-4Zm-5 10 3 3 7-7',carShield:'M3 11h15v8H3v-8Zm2 0 2-7h8l2 7M6 19v3m9-3v3m3-18 5 2v4l-5 3-3-2',other:'M3 5h18v14H3V5Zm4 7h.1m4.9 0h.1m4.9 0h.1',euro:'M18 5a7 7 0 0 0-11 7 7 7 0 0 0 11 7M4 10h11M4 14h10',arrow:'M12 3v17m-6-6 6 6 6-6',basket:'M3 9h18l-2 11H5L3 9Zm4 0 5-7 5 7M9 12v5m6-5v5',cup:'M4 5h12v10a5 5 0 0 1-10 0V5m10 2h3a3 3 0 0 1 0 6h-3M3 22h17',star:'m12 2 3 6 7 1-5 5 1 7-6-3-6 3 1-7-5-5 7-1 3-6Z',bag:'M5 7h14l2 15H3L5 7Zm3 0V5a4 4 0 0 1 8 0v2',home:'m2 11 10-9 10 9M5 9v12h14V9m-10 12v-8h6v8',phone:'M6 2h12v20H6V2Zm4 17h4',play:'m7 3 14 9-14 9V3Z',appliance:'M4 2h16v20H4V2Zm0 7h16M8 4v1m0 6v4',health:'M8 2h8v6h6v8h-6v6H8v-6H2V8h6V2Z',car:'M3 10h18v9H3v-9Zm2 0 2-7h10l2 7M6 19v3m12-3v3M6 14h2m8 0h2',bus:'M4 2h16v17H4V2Zm0 10h16M8 4v8m8 0V4M6 19v3m12-3v3',book:'M12 4v18M2 3l10 2 10-2v16l-10 2-10-2V3Z',gift:'M2 8h20v5H2V8Zm2 5v9h16v-9M12 8v14M12 8C2 8 5-4 12 8Zm0 0c10 0 7-12 0 0Z'};
+ paths.switch='M20 10a8 8 0 0 0-14-4L3 9m0-5v5h5m-4 5a8 8 0 0 0 14 4l3-3m0 5v-5h-5';
  const icon=(name,size=23)=>`<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="${paths[name]||paths.star}"/></svg>`;
  const groups=[['fixed','Pravidelné výdavky','Platby, s ktorými počítaš'],['consumption','Bežná spotreba','Každodenné potreby aj radosti'],['insurance','Poistenia','Mesačné poistné a modelové krytie'],['saving','Rezerva','Odkladanie · peniaze bokom'],['goals','Na budúcnosť','Odkladanie · tvoje budúce ciele']];
  let lastHaptic=0,lastHapticValue=null;
  function haptic(value){if(reduced.matches||typeof navigator==='undefined'||typeof navigator.vibrate!=='function')return;const now=Date.now();if(value===lastHapticValue||now-lastHaptic<65)return;lastHaptic=now;lastHapticValue=value;try{navigator.vibrate(8);}catch{}}
  let revealBusy=false,revealTimer=null,flight=null,pendingEvent=null;
  const reduced=matchMedia('(prefers-reduced-motion: reduce)');
+ const genders=Object.fromEntries(BudgetCharacters.profiles.map(p=>[p.id,p.defaultGender]));
+ const identity=p=>p.variants[genders[p.id]];
+ const genderSwitch=p=>`<div class="gender-switch" role="group" aria-label="Podoba postavy pri príjme ${p.income} eur">${[['male','♂','Muž'],['female','♀','Žena']].map(([value,glyph,label])=>`<button type="button" data-action="gender" data-character="${p.id}" data-gender="${value}" aria-label="${label} · ${p.income} €" aria-pressed="${genders[p.id]===value}" title="${label}"><span aria-hidden="true">${glyph}</span></button>`).join('')}</div>`;
+ let character=null,traits={discipline:4,future:50},characterIncome=1100,characterReserve=1000,characterSeed=null;
+ let attempt=1;
+ const sound=typeof SimulationSound==='undefined'?null:SimulationSound.create();
+ let lastPaymentDay=null;
  let budget=Y.defaults(),answer=null,run=null,projection=null,plan=null,previous=null,step='welcome',revealed=0,cursor=-1,playing=false,timer=null,inspected=null,editing=false;
  const primary=(a,t,disabled=false)=>`<button class="button primary ${a==='reveal'?'month-discover':''} ${a==='play'&&playing?'is-simulating':''}" data-action="${a}" ${disabled?'disabled':''} ${a==='play'&&playing?'aria-busy="true"':''}>${a==='reveal'?'<span class="discover-plus" aria-hidden="true">+</span>':''}${t}${a==='play'&&playing?'<span class="simulation-spinner" aria-hidden="true"></span>':a==='reveal'?'':'<span aria-hidden="true">→</span>'}</button>`;
- const title=(k,h,p='')=>`<div class="flow-heading"><p class="eyebrow">${k}</p><h1 tabindex="-1">${h}</h1>${p?`<p>${p}</p>`:''}</div>`;
- const progress=n=>`<nav class="flow-progress" aria-label="Postup">${['Rozpočet','Tvoj odhad','Január','Celý rok'].map((s,i)=>`<span class="${i===n?'current':i<n?'done':''}"><b>${i<n?'✓':String(i+1).padStart(2,'0')}</b>${s}</span>`).join('')}</nav>`;
+ const title=(k,h,p='')=>`<div class="flow-heading">${k?`<p class="eyebrow">${k}</p>`: ''}<h1 tabindex="-1">${h}</h1>${p?`<p>${p}</p>`:''}</div>`;
+ const progress=n=>`<nav class="flow-progress" aria-label="Postup">${(character?['Postava','Správanie','Január','Celý rok']:['Rozpočet','Tvoj odhad','Január','Celý rok']).map((s,i)=>`<span class="${i===n?'current':i<n?'done':''}"><b>${i<n?'✓':String(i+1).padStart(2,'0')}</b>${s}</span>`).join('')}</nav>`;
  function stop(){clearTimeout(timer);playing=false;}
  function nav(s){stop();finishReveal(false);step=s;inspected=null;render();window.scrollTo({top:0,behavior:'instant'});$('#journey h1')?.focus({preventScroll:true});}
- function render(){if(step==='welcome')welcome();else if(step==='budget')form();else if(step==='question')question();else if(step==='result')finalScreen();else scene();}
- function welcome(){$('#journey').innerHTML=`<section class="hero year-welcome"><div class="hero-copy"><p class="eyebrow"><span class="live-dot"></span> ROZPOČET NAŽIVO · JEDEN MOŽNÝ ROK</p><h1 tabindex="-1">Ako tvoj rozpočet<br><span>zvládne život?</span></h1><p class="hero-description">Zostav si mesačný rozpočet. Potom vyskúšaj, čo s ním počas roka spravia bežné aj nečakané situácie.</p><div class="hero-actions"><button class="button cream" data-action="begin">Vytvoriť rozpočet <span aria-hidden="true">↗</span></button></div><p class="welcome-permission">Nemusíš zadávať vlastné čísla. Pokojne si vymysli domácnosť a vyskúšaj to na nej.</p></div><div class="welcome-conversation" aria-hidden="true"><div class="speech purple">MÁM PLÁN.</div><div class="speech sand">A POTOM<br>PRÍDE ŽIVOT.</div><div class="mini-year">JAN <span>━━━━━━━━━━━</span> DEC</div></div></section><div class="flow-promise"><span>01 <strong>Poskladaj rozpočet</strong></span><span>02 <strong>Zaži jeden rok</strong></span><span>03 <strong>Skús to inak</strong></span></div>`;}
+ function render(){if(step==='welcome')welcome();else if(step==='character')characterForm();else if(step==='budget')form();else if(step==='question')question();else if(step==='result')finalScreen();else scene();}
+ function welcome(){
+  $('#journey').innerHTML=`<section class="character-welcome">
+   <p class="welcome-meta">Bez registrácie</p>
+   <div class="welcome-bubble">
+    <div class="flow-heading">
+     <img class="welcome-stamp" src="assets/welcome-burst.svg" alt="" width="195" height="124">
+     <h1 tabindex="-1">Výplata príde.<br><span>Život má iné plány.</span></h1>
+     <p>Vyber si postavu alebo si vytvor vlastný rozpočet. Zisti, ako tvoj rozpočet zvládne bežný mesiac aj nečakané výdavky.</p>
+    </div>
+    <svg class="welcome-bubble-tail" viewBox="0 0 86 36" aria-hidden="true"><path fill="currentColor" transform="translate(0 36) rotate(-90)" d="M32 86C32 72.5567 24.9356 60.1404 13.4584 53.4239L2.16336 46.8101C-.721121 45.1259-.721121 40.8947 2.16336 39.2104L13.4584 32.5966C24.9356 25.8596 32 13.4433 32 0V86ZM32 0V86H36V0Z"/></svg>
+   </div>
+   <h2 class="selection-heading">Kto bude hlavná postava?</h2>
+   <div class="character-grid">${BudgetCharacters.profiles.map(p=>`<article class="character-option">${genderSwitch(p)}<button class="character-card ${p.id}" data-action="choose-character" data-character="${p.id}"><span class="avatar-stage"><img src="assets/avatars/${identity(p).avatar}.png" alt="" width="260" height="260"></span><span class="character-name">${identity(p).name}</span><strong>${money(E.cents(p.income))}<small> čistého / mesiac</small></strong><span class="card-cta">Vyskúšať príbeh <span aria-hidden="true">→</span></span></button></article>`).join('')}</div>
+   <div class="custom-entry"><div><h2>Radšej vlastný príbeh?</h2><p>Vyplň si svoj rozpočet a vyskúšaj vlastné čísla.</p></div><button class="button secondary" data-action="begin">Vyplň si svoj rozpočet →</button></div>
+  </section>`;
+  $('.welcome-bubble .flow-heading').addEventListener('click', () => {
+   if(reduced.matches || window.getSelection()?.type === 'Range')return;
+   const stamp=$('.welcome-stamp');
+   stamp.getAnimations().forEach(animation => animation.cancel());
+   stamp.animate([
+    {transform:'scale(1)'},
+    {transform:'scale(1.24) rotate(12deg)',filter:'sepia(1)',opacity:.85,offset:.34},
+    {transform:'scale(1)'}
+   ],{duration:520,easing:'cubic-bezier(.2,.75,.35,1)'});
+  });
+ }
+ function openCharacterPicker(){
+  const dialog=$('#character-picker');
+  dialog.innerHTML=`<button class="dialog-close" data-action="close-character-picker" aria-label="Zavrieť výber postavy" autofocus>×</button><h2 id="character-picker-title">Vyber si postavu</h2><div class="character-picker-list">${BudgetCharacters.profiles.map(profile=>{
+   const person=identity(profile),current=profile.id===character;
+   return `<button class="character-picker-option" data-action="choose-character" data-character="${profile.id}" ${current?'disabled':''}><img src="assets/avatars/${person.avatar}.png" alt="" width="46" height="46"><span><strong>${person.name}</strong><small>${money(E.cents(profile.income))} / mesiac</small></span>${current?'<span class="character-picker-current">Aktuálna</span>':''}</button>`;
+  }).join('')}</div>`;
+  dialog.showModal();
+ }
+ // Eye centers and nearby skin colors in the original 1254 × 1254 portraits.
+ const portraitEyes={
+  jozko:[[566,368,'#fdbb92'],[713,334,'#fdbb93']],
+  jozka:[[582,380,'#fdbb8e'],[719,344,'#fcbb8d']],
+  ferko:[[564,355,'#fcb98c'],[732,382,'#fcb88d']],
+  ferka:[[551,356,'#fdbc8f'],[718,385,'#fdbb8e']],
+  janka:[[582,349,'#fab394'],[742,370,'#fab293']],
+  janko:[[579,342,'#fcac8e'],[740,367,'#fdaf90']]
+ };
+ function characterPortrait(person){
+  const eyelids=portraitEyes[person.avatar].map(([x,y,skin])=>`<g transform="translate(${x} ${y})"><ellipse rx="22" ry="31" fill="${skin}"/><path d="M-15 0Q0 11 15 0" fill="none" stroke="#092b50" stroke-width="8" stroke-linecap="round"/></g>`).join('');
+  return `<div class="profile-art"><img src="assets/avatars/${person.avatar}.png" alt="" width="260" height="260"><svg class="portrait-eyelids" viewBox="0 0 1254 1254" preserveAspectRatio="xMidYMax meet" aria-hidden="true">${eyelids}</svg></div>`;
+ }
+ function characterForm(){
+  const p=BudgetCharacters.profiles.find(p=>p.id===character);budget=BudgetCharacters.budgetFor(character,characterIncome,characterReserve,traits.future);answer=traits.discipline;
+  $('#journey').innerHTML=`<section class="character-settings">${title('','Nastav správanie svojej postavy',editing?'Zmeň jednu vec. Rovnaké životné udalosti ukážu rozdiel.':'')}<div class="character-setup-grid"><aside class="profile-summary ${p.id}"><div class="profile-portrait"><button class="icon-button character-switch" data-action="open-character-picker" aria-label="Vybrať inú postavu" aria-haspopup="dialog">${icon('switch',22)}</button>${characterPortrait(identity(p))}<h2>${identity(p).name}</h2></div><div class="profile-finances"><p class="profile-income"><span>Čistý mesačný príjem</span><strong>${money(E.cents(p.income))}</strong></p><div class="character-reserve"><label for="character-reserve">Veľkosť rezervy</label><div class="reserve-readout"><output id="character-reserve-value" for="character-reserve">${money(E.cents(characterReserve))}</output><span id="character-reserve-shield" class="reserve-shield" style="--reserve-level:${characterReserve/1000}" aria-hidden="true">${icon('shield',32)}</span></div><input id="character-reserve" data-character-field="reserve" type="range" min="0" max="1000" step="100" value="${characterReserve}" style="--fill:${characterReserve/10}%" aria-valuetext="${money(E.cents(characterReserve))}"><div class="reserve-limits" aria-hidden="true"><span>0 €</span><span>1 000 €</span></div><p>Už odložené peniaze, nie ďalší príjem.</p></div></div></aside><div class="trait-panel"><div class="preset-section" hidden><p class="eyebrow">ZAČNI JEDNÝM KLIKNUTÍM</p><div class="behavior-presets" role="group" aria-label="Rýchle nastavenie správania">${presets.map(preset=>`<button data-action="preset" data-preset="${preset.id}" aria-pressed="${traits.discipline===preset.discipline&&traits.future===preset.future}"><strong>${preset.name}</strong><small>${preset.text}</small></button>`).join('')}</div><p>Vyber si štart. Posuvníkmi si ho doladíš po svojom.</p></div><section><span class="eyebrow">01 / DODRŽANIE ROZPOČTU</span><h2 id="character-discipline-title">Ako často sa bude držať svojho rozpočtu?</h2><label for="character-discipline" id="discipline-label">${characterAnswers[traits.discipline-1]}</label><input id="character-discipline" aria-labelledby="character-discipline-title" data-character-field="discipline" type="range" min="1" max="6" step="1" value="${traits.discipline}" style="--fill:${(traits.discipline-1)*20}%"><div class="trait-extremes"><span>Takmer nikdy</span><span>Vždy</span></div></section><section><span class="eyebrow">02 / DNES ALEBO ZAJTRA</span><h2>Čomu dá prednosť?</h2><label for="character-future" id="future-label">${traits.future===0?'Užijem si teraz':traits.future===100?'Rezerva na prvom mieste':'Trochu dnes, trochu na neskôr'} · ${traits.future} / 100</label><input id="character-future" data-character-field="future" type="range" min="0" max="100" step="10" value="${traits.future}" style="--fill:${traits.future}%"><div class="trait-extremes"><span>Viac radostí dnes</span><span>Viac rezervy neskôr</span></div><p>Základné potreby ostávajú zaplatené. Rozdeľuješ len sumu, ktorá po nich zostane.</p></section><div id="character-budget-summary"></div><details class="basket-details"><summary>Kam presne ide spotreba?</summary><div id="character-basket"></div></details><div class="character-launch">${primary('character-start',editing?'Zopakovať mesiac s novým plánom':'Začať Januárom')}</div></div></div></section>`;updateCharacterSummary();
+ }
+ function basketChart(items){
+  const rows=items.filter(row=>row.amount>0),total=rows.reduce((sum,row)=>sum+E.cents(row.amount),0);
+  const colors=['#4479ff','#8073d2','#c38c33','#329c94','#5982a7','#d77065','#b05c95','#7a9452'];
+  let angle=-Math.PI/2;
+  const slices=rows.map((row,index)=>{
+   const amount=E.cents(row.amount),size=amount/total*Math.PI*2,end=angle+size;
+   const x1=110+96*Math.cos(angle),y1=110+96*Math.sin(angle),x2=110+96*Math.cos(end),y2=110+96*Math.sin(end);
+   const shape=rows.length===1?'<circle cx="110" cy="110" r="96"':`<path d="M110 110 L${x1.toFixed(3)} ${y1.toFixed(3)} A96 96 0 ${size>Math.PI?1:0} 1 ${x2.toFixed(3)} ${y2.toFixed(3)} Z"`;
+   angle=end;
+   return `${shape} fill="${colors[index%colors.length]}" stroke="white" stroke-width="2"><title>${esc(row.name)} · ${money(amount)}</title>${rows.length===1?'</circle>':'</path>'}`;
+  }).join('');
+  return `<figure class="basket-chart"><div class="basket-chart-visual"><svg viewBox="0 0 220 220" role="img" aria-label="Rozdelenie mesačnej spotreby, spolu ${money(total)}">${slices||'<circle cx="110" cy="110" r="96" fill="#e7eaf5"/>'}<circle cx="110" cy="110" r="61" fill="#fff" pointer-events="none"/></svg><figcaption>Plánovaná spotreba<strong>${money(total)}</strong></figcaption></div><ul class="basket-chart-legend">${rows.map((row,index)=>`<li><i style="background:${colors[index%colors.length]}" aria-hidden="true"></i><span>${esc(row.name)}</span><strong>${money(E.cents(row.amount))}</strong></li>`).join('')}</ul></figure>`;
+ }
+ function updateCharacterSummary(changedField='initial'){
+  document.querySelectorAll('[data-action="preset"]').forEach(button=>{const preset=presets.find(p=>p.id===button.dataset.preset);button.setAttribute('aria-pressed',String(traits.discipline===preset.discipline&&traits.future===preset.future));});
+  $('#character-discipline').setAttribute('aria-valuetext',characterAnswers[traits.discipline-1]);
+  $('#character-future').setAttribute('aria-valuetext',traits.future+' zo 100 v prospech odkladania');
+  if(changedField==='discipline')return;
+  if(changedField==='reserve'){
+   budget.initial.reserve=characterReserve;
+   return;
+  }
+  budget=BudgetCharacters.budgetFor(character,characterIncome,characterReserve,traits.future);
+  const t=Y.totals(budget);
+  const profile=BudgetCharacters.profiles.find(p=>p.id===character),essentials=E.cents(profile.housing+profile.phone+20+profile.food+profile.transport);
+  const joys=Math.max(0,t.expenses-essentials);
+  const parts=[['Základné potreby',essentials,'needs','home'],['Radosti',joys,'joy','bag'],['Do rezervy',t.saving,'save','shield']];
+  const scale=Math.max(1,t.income,t.expenses+t.saving);
+  $('#future-label').textContent=money(t.saving)+' mesačne do rezervy';
+  if(changedField==='initial'){
+   $('#character-budget-summary').innerHTML=`<div class="allocation-card"><div class="allocation-title"><span class="eyebrow">TVOJ PLÁN NA MESIAC</span></div><div class="allocation-bar" aria-hidden="true">${parts.map(([,amount,category])=>`<span class="${category}" data-allocation-segment="${category}" style="width:${amount/scale*100}%"></span>`).join('')}</div><div class="allocation-legend">${parts.map(([name,amount,category,glyph])=>`<span><span class="allocation-icon ${category}">${icon(glyph,18)}</span>${name}<strong data-allocation-value="${category}">${money(amount)}</strong></span>`).join('')}</div></div>`;
+  }else{
+   for(const [,amount,category] of parts){
+    $(`[data-allocation-segment="${category}"]`).style.width=`${amount/scale*100}%`;
+    $(`[data-allocation-value="${category}"]`).textContent=money(amount);
+   }
+  }
+  $('#character-basket').innerHTML=basketChart([...budget.fixed,...budget.consumption,...budget.insurance]);
+ }
+ let monthRulesOpen=false,receiptTransfersOpen=false,eventCardsOpen=false;
+ const receiptCounter=typeof requestAnimationFrame==='function'?ReceiptCounter.create({
+  requestFrame:requestAnimationFrame,cancelFrame:cancelAnimationFrame,now:()=>performance.now(),
+  format:(value,target)=>new Intl.NumberFormat('sk-SK',{style:'currency',currency:'EUR',minimumFractionDigits:target%100?2:0,maximumFractionDigits:target%100?2:0}).format(value/100)
+ }):null;
+ const receiptAmount=(key,value)=>`<strong data-receipt-amount="${esc(key)}" data-cents="${value}" aria-label="${money(value)}">${money(value)}</strong>`;
+ function monthlyReceipt(){
+  const summary=BudgetReceipt.summarize(projection.ledger,run.year+'-01',cursor<0?null:projection.days[cursor].date),done=cursor>=30;
+  const {spent,income,coveredItems,transfers}=summary;
+  return `<aside class="month-receipt" aria-label="Účtenka za január"><div class="receipt-header"><span class="receipt-shop">ŽIVOT, s. r. o.</span><h2>Účtenka za január</h2><p>${done?'Mesiac uzavretý · 31 / 31 dní':cursor<0?'':`Priebežne · ${cursor+1}. január`}</p></div><div class="receipt-list">${transfers.reserve?`<div class="receipt-saving">${icon('shield',18)}<span>1. január · Do rezervy<small>Presun na vlastnú rezervu</small></span>${receiptAmount('saved-reserve',transfers.reserve)}</div>`: ''}${summary.rows.length?summary.rows.map(row=>`<div class="receipt-row ${row.extra?'receipt-extra':''}"><span class="receipt-check" aria-hidden="true">✓</span><span>${esc(row.name)}${row.extra?'<small>neplánované</small>':''}</span>${receiptAmount(row.key,row.amount)}</div>`).join(''):`<div class="receipt-empty">${icon('basket',36)}<strong>Ešte si nenakupoval.</strong><p>Spusti mesiac a účtenka sa začne plniť.</p><span aria-hidden="true">· · ·</span></div>`}</div>${summary.rows.length?`<div class="receipt-total"><span>SPOLU MINUTÉ</span>${receiptAmount('total',spent)}</div>`:''}${income?`<p class="receipt-income">Príjmy navyše <strong>+ ${money(income)}</strong></p>`:''}${coveredItems.map(item=>`<p class="receipt-covered"><span>${esc(item.name)}<small>${esc(item.reason)} · navyše 0 €</small></span></p>`).join('')}${transfers.drawn||transfers.reserve||transfers.future?`<details class="receipt-transfers" data-month-disclosure="transfers" ${receiptTransfersOpen?'open':''}><summary>Presuny bokom <span>↗</span></summary><p>Vlastné peniaze, mimo súčtu minutého.</p>${[['drawn','Z rezervy na účet'],['reserve','Z účtu do rezervy'],['future','Z účtu na budúcnosť']].filter(([key])=>transfers[key]>0).map(([key,label])=>`<div><span>${label}</span><strong>${money(transfers[key])}</strong></div>`).join('')}</details>`:''}<div class="receipt-footer">${done?'<span class="receipt-stamp">JANUÁR VYBAVENÝ ✓</span>':''}<div class="receipt-barcode" aria-hidden="true"></div><small>Výdavky za mesiac</small></div></aside>`;
+ }
+ function moneyRing(){
+  const d=snapshot(),base=projection.opening.checking,value=d.checking,ratio=Math.min(1,Math.abs(value)/Math.max(1,base)),circ=628.32,done=cursor>=30;
+  const today=cursor<0?[]:projection.days[cursor].events;
+  const main=today.filter(e=>!['daily','reserveDraw','income'].includes(e.type));
+  const daily=-today.filter(e=>e.type==='daily').reduce((n,e)=>n+e.amount,0);
+  const active=main.length>1?[{name:'Dnešné pohyby · '+main.length+' položky',icon:'coins',amount:main.reduce((n,e)=>n+(e.type==='transfer'?-e.amount:e.amount),0)}]:main.length?main:[{name:'Bežný deň',icon:'basket',amount:-daily}];
+  return `<div class="money-view"><div class="ring-stage"><div class="month-track"><span>${done?'31 / 31 dní':cursor<0?'Dni v mesiaci':`Deň ${cursor+1} z 31`}</span><div aria-hidden="true">${Array.from({length:31},(_,i)=>`<i class="${i<=cursor?'passed':''}"></i>`).join('')}</div></div><div class="money-ring ${value<0?'in-debt':''}" data-balance="checking" data-value="${value}" role="img" aria-label="Zostatok bežného účtu ${money(value)}"><svg viewBox="0 0 240 240" aria-hidden="true"><circle cx="120" cy="120" r="100" fill="none" stroke="#e7eaf5" stroke-width="18"/><circle class="ring-fill" cx="120" cy="120" r="100" fill="none" stroke="${value<0?'#c6424c':'#4479ff'}" stroke-width="18" stroke-linecap="round" stroke-dasharray="${ratio*circ} ${circ}" transform="rotate(-90 120 120)"/></svg><div><small>${value<0?'CHÝBA NA ÚČTE':done?'NA KONCI MESIACA':'Zostatok na účte'}</small><strong>${money(value)}</strong><span>${value>base?'Nad úvodnou mierkou kruhu':cursor<0?'':done?'Január je za tebou.':date(projection.days[cursor].date)}</span></div></div><div class="payment-stage payment-stream" aria-label="Práve prechádza účtom"></div><div class="month-pockets"><div data-balance="reserve" data-value="${d.reserve}">${icon('shield',19)}<span>V rezerve</span><strong>${money(d.reserve)}</strong></div>${d.future||projection.opening.future?`<div data-balance="future" data-value="${d.future}">${icon('star',19)}<span>Na budúcnosť</span><strong>${money(d.future)}</strong></div>`:''}</div></div>${monthlyReceipt()}</div><details hidden class="month-rules" data-month-disclosure="rules" ${monthRulesOpen?'open':''}><summary>Ako čítať kruh a presuny?</summary><p>Plný kruh je úvodný účet: ${money(base)} vrátane januárovej mzdy. Mierka sa nemení${value>base?'; zostatok práve prekročil jeden plný kruh':''}. Červená znamená chýbajúce peniaze. Ak účet nestačí, čerpá sa dostupná rezerva. Budúce ciele sa automaticky nepoužívajú. Presuny uvidíš spolu pod účtenkou; nezapočítavajú sa do minutého.</p></details>`;
+ }
+ function monthConclusion(){
+  const r=JourneyInsights.month(projection),d=r.end;
+  const heading=r.firstGap?'Tentoraz peniaze nestačili.':r.tone==='red'?'Z rezervy ubudlo.':r.tone==='yellow'?(r.reserveChange>0?'Rezerva pomohla a aj narástla.':'Rezerva pomohla udržať mesiac.'):'Rezerva zostala v bezpečí.';
+  const story=r.firstGap?'Ani rezerva nepokryla všetky platby.':r.tone==='red'?'Z rezervy sa použilo viac, než si do nej tento mesiac odložil.':r.tone==='yellow'?'Časť odložených peňazí sa počas mesiaca použila. Rezerva ti pomohla zvládnuť výdavky.':'Tento mesiac si z rezervy nemusel čerpať.';
+  return `<section class="month-conclusion debrief compact-result result-${r.tone}"><span class="result-emblem" aria-hidden="true">${icon(r.tone==='green'?'shield':r.tone==='yellow'?'shield':'bag',28)}</span><h2 id="month-result-title" tabindex="-1">${heading}</h2><p class="result-story">${story}</p><div class="debrief-main"><span>${d.checking<0?'Na účte chýba':'Na účte zostalo'}</span><strong data-balance="checking" data-value="${d.checking}" class="${d.checking<0?'negative':''}">${money(Math.abs(d.checking))}</strong></div><div class="debrief-wallet"><div data-balance="reserve" data-value="${d.reserve}"><span>V rezerve</span><strong>${money(d.reserve)}</strong><small>${r.reserveChange>=0?'+ ':''}${money(r.reserveChange)} oproti začiatku mesiaca</small></div>${d.future?`<div data-balance="future" data-value="${d.future}"><span>Na budúcnosť</span><strong>${money(d.future)}</strong></div>`:''}</div><details class="result-details"><summary>Výsledok</summary><div class="result-breakdown"><dl><div><dt>Odložené do rezervy na začiatku mesiaca</dt><dd>${money(r.saved)}</dd></div><div><dt>Použité z rezervy</dt><dd>− ${money(r.drawn)}</dd></div><div><dt>Zmena rezervy za mesiac</dt><dd>${r.reserveChange>=0?'+ ':''}${money(r.reserveChange)}</dd></div><div><dt>Nákupy nad plán</dt><dd>${money(r.overspending)}</dd></div><div><dt>Životné udalosti</dt><dd>${money(r.life)}</dd></div></dl></div></details></section>`;
+ }
+ function pushPayments(){
+  if(cursor<0||cursor===lastPaymentDay)return;lastPaymentDay=cursor;
+  const stage=$('.payment-stream');if(!stage?.append)return;
+  const entries=projection.days[cursor].events;
+  let items=entries.filter(e=>!['daily','reserveDraw','income'].includes(e.type));
+  const fixed=items.filter(e=>e.type==='expense');if(fixed.length>1)items=[{name:'Pravidelné platby',icon:'home',type:'expense',amount:fixed.reduce((n,e)=>n+e.amount,0)},...items.filter(e=>e.type!=='expense')];
+  const daily=entries.filter(e=>e.type==='daily').reduce((n,e)=>n+e.amount,0);
+  if(daily)items.push({name:'Bežný deň',icon:'basket',amount:daily,type:'daily'});
+  const drawn=entries.filter(e=>e.type==='reserveDraw').reduce((n,e)=>n+e.amount,0);
+  if(drawn)items.push({name:'Pomohla rezerva',icon:'shield',amount:drawn,type:'reserveDraw'});
+  const arrivals=entries.filter(e=>e.type==='income'&&e.date.slice(8)!=='01');items.push(...arrivals);
+  const visible=items.filter(e=>e.amount||['covered','insured'].includes(e.type)).slice(0,5);
+  visible.forEach((e,index)=>{
+   const transfer=['transfer','reserveDraw'].includes(e.type),income=['income','extraIncome'].includes(e.type),expense=e.amount<0;
+   const node=document.createElement('div');node.className='flying-payment '+(transfer?'is-transfer':expense?'is-expense':income?'is-income':'is-covered');
+   node.style.animationDelay=(index*360)+'ms';node.innerHTML=`${icon(e.icon||'basket',23)}<span>${esc(e.name)}</span><strong>${transfer?(e.type==='reserveDraw'?'+ ':'− '):income?'+ ':expense?'− ':''}${money(Math.abs(e.amount))}</strong>`;
+   if(reduced.matches){stage.replaceChildren(node);return;}
+   node.addEventListener('animationend',()=>node.remove(),{once:true});stage.append(node);
+  });
+  while(stage.children.length>8)stage.firstElementChild.remove();
+  if(visible.length)sound?.play(visible.some(e=>e.amount<0)?'expense':visible.some(e=>e.type==='transfer'||e.type==='reserveDraw')?'transfer':'income');
+ }
+ function januaryScene(force=false){
+  const preparing=cursor<0,done=cursor>=30,scroll=$('.receipt-list')?.scrollTop||0;
+  const focused=document.activeElement?.dataset?.action;
+  const stage=$('.january-journey.is-playing .month-scene');
+  if(!force&&playing&&stage?.matches?.('.month-scene')&&$('#journey .scene-actions>.primary')?.getAttribute?.('aria-busy')==='true'){
+   const fresh=document.createElement('div');fresh.innerHTML=moneyRing();
+   for(const selector of ['.month-track','.money-ring','.month-pockets','.month-receipt']){const current=stage.querySelector(selector),next=fresh.querySelector(selector);if(current&&next)current.replaceWith(next);}
+   const stickers=$('.month-stickers');
+   if(stickers)stickers.outerHTML=monthStickers();
+   const list=$('.receipt-list');if(list)list.scrollTop=scroll;animateReceipt();return;
+  }
+  $('#journey').innerHTML=`<section class="january-journey ${done?'is-complete':'is-playing'}"><div class="live-heading"><div><h1 tabindex="-1">${done?'Január za tebou.':'Január simulácia.'}</h1></div><button hidden class="sound-toggle" data-action="sound" aria-pressed="${!sound?.muted}" aria-label="${sound?.muted?'Zapnúť zvuk':'Stíšiť zvuk'}">${icon('phone',18)}<span>Zvuk ${sound?.muted?'vypnutý':'zapnutý'}</span></button></div>${done?`<div class="month-finale">${monthConclusion()}${monthlyReceipt()}</div>`:`<section class="annual-scene month-scene">${moneyRing()}</section>${monthStickers()}`}<div class="flow-actions scene-actions"><div>${done?'':`${preparing?'':'<button class="text-link" data-action="skip">Preskočiť</button>'}`}</div>${done?primary('rest','A čo celý rok?'):preparing&&revealed<3?primary('reveal',previous?'Znova odhaliť udalosti':'Odhaľ mesačný výdavok'):primary('play',playing?'Pozastaviť mesiac':preparing?'Spustiť mesiac':'Pokračovať')}</div><p hidden class="quiet-note">Ilustračný scenár.</p></section>`;
+  const list=$('.receipt-list');if(list)list.scrollTop=scroll;animateReceipt();
+  if(focused)($(`[data-action="${focused}"]`)||$('#journey .scene-actions>.primary'))?.focus({preventScroll:true});
+ }
+ function animateReceipt(){receiptCounter?.render([...document.querySelectorAll('[data-receipt-amount]')].map(node=>({key:node.dataset.receiptAmount,value:Number(node.dataset.cents),set:text=>{node.textContent=text;}})),!reduced.matches);}
  function amountInput(value,key,id,field='amount'){
   const min=key==='income'&&id==='salary'?750:0,max=key==='income'&&id==='salary'?3000:Math.max(2000,Math.ceil(value/500)*500),label=key==='initial'?{checking:'Bežný účet',reserve:'Rezerva',future:'Na budúcnosť'}[field]:budget[key].find(r=>r.id===id)?.name;
-  return `<div class="paired-input"><div class="euro-entry"><input type="number" min="${min}" max="${min===750?3000:1000000000}" step="0.01" value="${value}" data-key="${key}" data-id="${id}" data-field="${field}" aria-label="Suma: ${esc(label)}" inputmode="decimal" required><span>€</span></div><input type="range" min="${min}" max="${max}" step="0.01" value="${value}" data-key="${key}" data-id="${id}" data-field="${field}" aria-label="Posuvník sumy ${esc(label)}" style="--fill:${(value-min)/(max-min)*100}%"></div>`;
+  return `<div class="paired-input"><div class="euro-entry"><input type="number" min="${min}" max="${min===750?3000:1000000000}" step="0.01" value="${value}" data-key="${key}" data-id="${id}" data-field="${field}" aria-label="Suma: ${esc(label)}" inputmode="decimal" required><span>€</span></div><input type="range" min="${min}" max="${max}" step="10" value="${value}" data-key="${key}" data-id="${id}" data-field="${field}" aria-label="Posuvník sumy ${esc(label)}" style="--fill:${(value-min)/(max-min)*100}%"></div>`;
  }
  function row(r,key){return `<div class="budget-row" data-row="${r.id}"><input class="row-name" value="${esc(r.name)}" data-key="${key}" data-id="${r.id}" data-field="name" aria-label="Názov položky ${esc(r.name)}" maxlength="80" required>${amountInput(r.amount,key,r.id)}${['irregular','known'].includes(key)?`<select data-key="${key}" data-id="${r.id}" data-field="month" aria-label="Mesiac ${esc(r.name)}">${months.map((m,i)=>`<option value="${i}" ${r.month===i?'selected':''}>${m}</option>`).join('')}</select>`:''}<button type="button" class="remove-row" data-action="remove" data-key="${key}" data-id="${r.id}" aria-label="Odstrániť ${esc(r.name)}">×</button>${key==='known'?`<label class="included-check"><input type="checkbox" data-key="known" data-id="${r.id}" data-field="included" ${r.included?'checked':''}> Už zahrnuté v mesačnom rozpočte — navyše 0 €</label>`:''}</div>`;}
  function form(){
@@ -38,7 +200,7 @@
   $('.scale-card').classList.remove('unanswered');$('#scale-value').innerHTML=`<span class="scale-number">0${answer}</span><strong>${answers[answer-1]}</strong>`;
   document.querySelectorAll('[data-scale-tick]').forEach(n=>n.classList.toggle('selected',Number(n.dataset.scaleTick)===answer));$('#journey [data-action="start-year"]').disabled=false;
  }
- function launch(same=false){stop();if(!same)run=Y.generate(budget,answer,crypto.getRandomValues(new Uint32Array(1))[0]);projection=Y.simulate(budget,run);plan=Y.simulate(budget,run,{plan:true});revealed=0;cursor=-1;editing=false;nav('january');}
+ function launch(same=false){stop();receiptCounter?.reset();monthRulesOpen=false;receiptTransfersOpen=false;eventCardsOpen=false;if(character){characterSeed??=crypto.getRandomValues(new Uint32Array(1))[0];run=BudgetCharacters.scenario(budget,traits.discipline,characterSeed);}else if(!same)run=Y.generate(budget,answer,crypto.getRandomValues(new Uint32Array(1))[0]);projection=Y.simulate(budget,run);plan=Y.simulate(budget,run,{plan:true});revealed=0;cursor=-1;lastPaymentDay=null;editing=false;nav('january');}
  const snapshot=()=>cursor<0?projection.opening:projection.days[cursor];
  function graph(){
   const mobile=matchMedia('(max-width:700px)').matches,W=mobile?360:1000,H=mobile?360:400,L=mobile?48:74,R=26,T=step==='january'?112:70,B=H-45,jan=step==='january',end=jan?30:projection.days.length-1,days=projection.days.slice(0,end+1),comparison=previous||plan;
@@ -81,7 +243,7 @@
  }
  function balances(){const d=snapshot(),drawn=cursor<0?0:projection.ledger.filter(e=>e.type==='reserveDraw'&&e.date<=projection.days[cursor].date).reduce((total,e)=>total+e.amount,0);return `<div class="three-balances">${[['checking','Bežný účet'],['reserve','Rezerva'],['future','Na budúcnosť']].map(([k,n])=>`<div><span>${n}</span><strong class="${d[k]<0?'negative':''}">${money(d[k])}</strong>${k==='reserve'?`<small class="reserve-drawn">Doteraz čerpané: <b>${money(drawn)}</b></small>`:''}</div>`).join('')}</div>`;}
  function presentEvent(e){return Y.isInsured(e,budget)?{...e,amount:0,included:true,text:'Pokrýva modelové poistenie. Pôvodný výdavok '+money(E.cents(e.amount))+'. Dopad na účet: 0 €.'}:e;}
- function eventCard(e){e=presentEvent(e);return `<article class="reveal-card ${pendingEvent===e.id?'landing-pending':''}" data-event-id="${esc(e.id)}"><span class="event-icon">${icon(e.icon)}</span><div><small>${date(e.date)} · ${e.mood?(e.mood==='pleasant'?'Príjemná situácia':'Nepríjemná situácia'):e.type==='life'?'skúšobný životný scenár':e.type==='deviation'?'spotreba oproti plánu':'súčasť plánu'}</small><h3>${esc(e.name)}</h3><strong>${e.included||e.type==='covered'?'Pokryté v pláne alebo poistením. Navyše: 0 €.':`− ${money(E.cents(e.amount))}`}</strong><p>${esc(e.text)}</p></div></article>`;}
+ function eventCard(e){e=presentEvent(e);return `<article class="reveal-card ${pendingEvent===e.id?'landing-pending':''}" data-event-id="${esc(e.id)}"><span class="event-icon">${icon(e.icon)}</span><div><small>${date(e.date)} · ${e.mood?(e.mood==='pleasant'?'Príjemná situácia':'Nepríjemná situácia'):e.type==='life'?'Život sa ozval':e.type==='deviation'?'nad vlastný plán':'súčasť plánu'}</small><h3>${esc(e.name)}</h3><strong>${e.included||e.type==='covered'?'Zahrnuté v pláne alebo kryté · navyše 0 €':`− ${money(E.cents(e.amount))}`}</strong><p>${esc(e.text)}</p></div></article>`;}
  function summarizeEvents(entries){
   const result=[],draws=new Map();
   for(const entry of entries){
@@ -98,13 +260,12 @@
   const p=projection,f=p.final,drawn=p.ledger.filter(e=>e.type==='reserveDraw').reduce((n,e)=>n+e.amount,0);
   const before=previous?previous.final:p.opening;
   const items=[['checking','Zostatok na účte','euro'],['reserve','Rezerva','shield'],['future','Na budúcnosť','star']];
-  const difference=v=>`${v>0?'+ ':''}${money(v)}`;
-  const insight=p.firstDeficit?'V tomto roku vznikol nedostatok. Dôležité je vidieť kedy a koľko, nie hodnotiť seba.':p.shortSaving?'Nie všetko plánované odkladanie sa podarilo. Rozpočet ukázal, kde naň neostal priestor.':'Tento skúšobný rok si pokryl bez nekrytého výdavku. Teraz vieš, aký priestor mal tvoj plán.';
-  $('#journey').innerHTML=`<section class="final-screen">${title('05 / TVOJ ROK V JEDNOM OBRAZE','Čo ukázal tvoj rok?','Jeden možný rok. Tri zostatky. Priestor skúsiť to inak.')}<div class="final-hero"><div class="final-hero-top"><span class="eyebrow">TAKTO KONČÍ TVOJ ROK</span><span>${run.year} · 31. december</span></div><div class="final-balances">${items.map(([key,label,glyph])=>`<div class="final-balance ${key}" data-final-balance="${key}"><span class="final-balance-label">${icon(glyph,22)}${label}</span><strong class="${f[key]<0?'in-deficit':''}">${money(f[key])}</strong></div>`).join('')}</div><p class="final-reserve-note">Z rezervy sa počas roka čerpalo <strong>${money(drawn)}</strong>. ${p.firstDeficit?`Prvý nekrytý výdavok: ${date(p.firstDeficit)}. Najväčší nedostatok: ${money(Math.max(0,-p.lowest.available))}.`:'Počas tohto roka nevznikol nekrytý výdavok.'}</p></div><p class="final-insight">${insight}</p>
-  <section class="before-after" aria-labelledby="comparison-title"><div class="comparison-heading"><div><p class="eyebrow">POZRI SA NA ROZDIEL</p><h2 id="comparison-title">${previous?'Rovnaký rok. Iný plán.':'Pred rokom. Po roku.'}</h2></div><p>${previous?'Porovnávaš dva rozpočty s rovnakými udalosťami, dátumami aj sumami.':'Začiatok už zahŕňa januárovú mzdu. Koniec zahŕňa príjmy, výdavky aj presuny za celý rok.'}</p></div><div class="comparison-scroll"><table><caption class="sr-only">Porovnanie troch zostatkov ${previous?'pred úpravou a po úprave rozpočtu':'na začiatku a na konci roka'}</caption><thead><tr><th scope="col">Tvoje peniaze</th><th scope="col">${previous?'Pred úpravou':'Na začiatku'}</th><th scope="col">${previous?'Po úprave':'Na konci'}</th><th scope="col">Rozdiel</th></tr></thead><tbody>${items.map(([key,label])=>`<tr><th scope="row">${label}<small class="mobile-table-delta">Rozdiel ${difference(f[key]-before[key])}</small></th><td>${money(before[key])}</td><td>${money(f[key])}</td><td>${difference(f[key]-before[key])}</td></tr>`).join('')}</tbody></table></div><p class="comparison-note">Presuny medzi vlastnými zostatkami nie sú zárobok. Vyššia rezerva alebo cieľ môžu znamenať menej peňazí na bežnom účte.</p></section>
-  <section class="next-questions" aria-labelledby="next-title"><p class="eyebrow">A ČO V BEŽNOM ŽIVOTE?</p><h2 id="next-title">Možno si hovoríš…</h2><div class="advice-bubbles">${Object.entries(BudgetAdvice).map(([key,item],i)=>`<button class="advice-bubble advice-${key}" data-action="advice" data-advice="${key}" aria-haspopup="dialog"><span class="advice-icon">${icon(item.icon,28)}</span><strong>${esc(item.label)}</strong><span class="advice-link">Pozrieť tipy <span aria-hidden="true">↗</span></span></button>`).join('')}</div></section>
-  <div class="flow-actions final-actions"><button class="text-link" data-action="new-year">Vyskúšať nový náhodný rok</button>${primary('retry','Zmeniť rozpočet a skúsiť ten istý rok')}</div>
-  <details class="final-details"><summary>Pozrieť priebeh roka a vysvetlenie výsledku</summary><p class="final-breakdown">Spotreba nad plán: −${money(p.deviation)}. Životné výdavky: −${money(p.life)}. Príjmy navyše: +${money(p.extra)}. Poistenie pokrylo ${money(p.insured)}.</p><p class="final-breakdown">Oproti plánu bez udalostí navyše zostalo na účte a v rezerve ${money(f.available-plan.final.available)} a na budúcnosť ${money(f.future-plan.final.future)}. Neuskutočnené plánované presuny: ${money(p.shortSaving)}.</p><section class="annual-scene">${graph()}<div class="year-legend"><span><i></i>Tvoj priebeh</span><span><i class="dashed"></i>${previous?'Predchádzajúci pokus':'Plán bez udalostí navyše'}</span></div><div id="moment" class="moment">Klikni na udalosť a pozri sa na jej detail.</div></section>${eventList()}</details><p class="quiet-note">Výsledok platí pre tvoje zadané údaje a tento ilustračný rok. <button class="text-link" data-action="help">Ako počítame?</button></p></section>`;
+  const insight=p.firstDeficit?'Niektoré dni chýbali peniaze. Koncový zostatok sám o sebe neukáže, aký náročný bol priebeh.':p.shortSaving?'Plánované odkladanie sa nepodarilo celé. V ďalšom pokuse skús zistiť, čo mu vzalo priestor.':'Tento príbeh sa obišiel bez nekrytého výdavku. Iný rok môže priniesť iné situácie — rezerva má význam aj vtedy, keď ju práve netreba.';
+  const relevantAdvice=p.firstDeficit?'shortage':p.deviation?'spending':'saving';
+  $('#journey').innerHTML=`<section class="final-screen">${title('05 / TVOJ ROK','Čo ukázal tvoj rok?')}<div class="final-hero"><div class="final-hero-top"><span class="eyebrow">ZOSTATKY</span><span>${run.year} · 31. december</span></div><table class="final-comparison"><caption class="sr-only">${previous?'Zostatky pred úpravou a po úprave rozpočtu':'Zostatky na začiatku a na konci roka'}</caption><thead><tr><th scope="col"><span class="sr-only">Kde sú peniaze</span></th><th scope="col">${previous?'Pred úpravou':'Na začiatku'}</th><th scope="col">${previous?'Po úprave':'Na konci'}</th></tr></thead><tbody>${items.map(([key,label,glyph])=>`<tr class="balance-row-${key}"><th scope="row"><span>${icon(glyph,20)}${label}</span></th><td class="balance-before">${money(before[key])}</td><td class="balance-after ${f[key]<0?'in-deficit':''}" data-final-balance="${key}">${money(f[key])}</td></tr>`).join('')}</tbody></table></div>
+  <details class="optional-tips"><summary>Chcem aj pár tipov</summary><section class="next-questions" aria-labelledby="next-title"><p class="eyebrow">A ČO V BEŽNOM ŽIVOTE?</p><h2 id="next-title">Jedna vec do ďalšej výplaty.</h2><div class="advice-bubbles">${Object.entries(BudgetAdvice).map(([key,item],i)=>`<button class="advice-bubble advice-${key} ${key===relevantAdvice?'is-relevant':''}" data-action="advice" data-advice="${key}" aria-haspopup="dialog"><span class="advice-icon">${icon(item.icon,28)}</span>${key===relevantAdvice?'<span class="advice-relevance">NADVÄZUJE NA TENTO VÝSLEDOK</span>':''}<strong>${esc(item.label)}</strong><span class="advice-link">Pozrieť tipy <span aria-hidden="true">↗</span></span></button>`).join('')}</div></section>
+  </details><div class="flow-actions final-actions"><button class="text-link" data-action="new-year">Vyskúšať nový náhodný rok</button><button class="button secondary" data-action="retry">Zmeniť rozpočet a skúsiť ten istý rok <span aria-hidden="true">→</span></button>${primary('home','Koniec')}</div>
+  <details class="final-details"><summary>Pozrieť priebeh roka a vysvetlenie výsledku</summary><p class="final-breakdown">${insight}</p><p class="final-breakdown">Z rezervy sa počas roka čerpalo ${money(drawn)}.${p.firstDeficit?` Prvý nekrytý výdavok: ${date(p.firstDeficit)}.`: ''}</p><p class="final-breakdown">Spotreba nad plán: −${money(p.deviation)}. Životné výdavky: −${money(p.life)}. Príjmy navyše: +${money(p.extra)}. Poistenie pokrylo ${money(p.insured)}.</p><p class="final-breakdown">Oproti plánu bez udalostí navyše zostalo na účte a v rezerve ${money(f.available-plan.final.available)} a na budúcnosť ${money(f.future-plan.final.future)}. Neuskutočnené plánované presuny: ${money(p.shortSaving)}.</p><section class="annual-scene">${graph()}<div class="year-legend"><span><i></i>Tvoj priebeh</span><span><i class="dashed"></i>${previous?'Predchádzajúci pokus':'Plán bez udalostí navyše'}</span></div><div id="moment" class="moment">Klikni na udalosť a pozri sa na jej detail.</div></section>${eventList()}</details><p class="quiet-note">Výsledok platí pre tvoje zadané údaje a tento ilustračný rok. <button class="text-link" data-action="help">Ako to funguje</button></p></section>`;
  }
  function showAdvice(key){
   const item=BudgetAdvice[key];if(!item)return;
@@ -113,8 +274,15 @@
   $('#info-dialog').showModal();
  }
  function eventList(){return `<details class="year-event-list"><summary>Udalosti roka · dostupný zoznam</summary><div>${run.events.map(raw=>{const e=presentEvent(raw);return `<button data-action="inspect" data-day="${E.diffDays(`${run.year}-01-01`,e.date)}">${icon(e.icon,18)}<span>${date(e.date)} · ${esc(e.name)}</span><strong>${e.included||e.type==='covered'?'navyše 0 €':`${e.type==='extraIncome'?'+':'−'}${money(E.cents(e.amount))}`}</strong></button>`;}).join('')}</div></details>`;}
- function scene(){if(step==='result'){finalScreen();return;}const focusAction=document.activeElement?.dataset?.action;const jan=step==='january',result=step==='result',end=jan?30:projection.days.length-1,done=cursor>=end,d=snapshot(),shown=run.events.filter(e=>e.date.slice(5,7)==='01').slice(0,revealed);const action=result?primary('retry','Zmeniť rozpočet a skúsiť ten istý rok'):jan&&revealed<3?primary('reveal','Čo možno prinesie mesiac?'):done?primary(jan?'rest':'results',jan?'A čo zvyšok roka?':'Pozrieť výsledok'):primary('play',playing?(jan?'Simulujem mesiac':'Simulujem rok'):cursor<0?'Prehrať január':'Pokračovať',playing);
-  $('#journey').innerHTML=`${progress(jan?2:3)}${title(result?'06 / CELÝ OBRAZ':jan?'03 / JEDEN MOŽNÝ ROK':'04 / VÄČŠÍ OBRAZ',result?'Čo ukázal tvoj rok?':jan?'Január':'A život ide ďalej.',result?'Tie isté situácie. Teraz vidíš ich spoločný dopad.':jan?'Pozrime sa na jeden možný rok podľa tvojho odhadu.':'Február až december. Január už zostáva započítaný.')}<section class="annual-scene"><div class="annual-top"><div><span class="eyebrow">BEŽNÝ ÚČET · TVOJE PENIAZE V ČASE</span><strong class="annual-available ${d.checking<0?'negative':''}">${money(d.checking)}</strong></div><span class="year-stamp">${run.year} · ${cursor<0?'začiatok januára':date(projection.days[cursor].date)}</span></div>${graph()}<div class="year-legend"><span><i></i>${previous?'Upravený rozpočet':'Tvoj priebeh'}</span><span><i class="dashed"></i>${previous?'Pôvodný pokus, rovnaké udalosti':'Plán bez udalostí navyše'}</span></div>${categoryLegend()}${balances()}<p class="balance-explain">Čiara sleduje bežný účet. Rezerva a peniaze na budúcnosť sú zobrazené osobitne. Ak účet nestačí, model čerpá dostupnú rezervu. Budúce ciele automaticky nepoužíva.</p><div id="moment" class="moment" aria-live="polite">${moment()}</div></section>${jan?`<div class="reveal-progress"><span>${revealed} / 3 udalosti</span><p>Najskôr náhľad. Peniaze sa zúčtujú až pri prehratí januára.</p></div>`:''}${jan&&shown.length?`<div class="reveal-grid">${shown.map(eventCard).join('')}</div>`:''}<div class="flow-actions scene-actions"><div>${!result&&revealed===3?`<button class="text-link" data-action="restart">Prehrať znova</button>${!done?'<button class="text-link" data-action="skip">Zobraziť výsledok hneď</button>':''}`:!result?'<button class="text-link" data-action="edit-before">← Späť k rozpočtu</button>':'<button class="text-link" data-action="new-year">Nový náhodný rok</button>'}</div>${action}</div>${!jan?eventList():''}<p class="quiet-note">Ilustračný scenár, nie predpoveď. <button class="text-link" data-action="help">Pravidlá výpočtu</button></p>`;
+ function scene(){
+  if(step==='january'){januaryScene();return;}
+  if(step==='result'){finalScreen();return;}
+  receiptCounter?.reset();
+  const focusAction=document.activeElement?.dataset?.action,d=snapshot(),done=cursor>=projection.days.length-1;
+  const annualContent=`<div class="annual-top"><div><span class="eyebrow">BEŽNÝ ÚČET · TVOJE PENIAZE V ČASE</span><strong class="annual-available ${d.checking<0?'negative':''}">${money(d.checking)}</strong></div><span class="year-stamp">${run.year} · ${date(projection.days[cursor].date)}</span></div>${graph()}<div class="year-legend"><span><i></i>${previous?'Upravený rozpočet':'Tvoj priebeh'}</span><span><i class="dashed"></i>${previous?'Pôvodný pokus, rovnaké udalosti':'Plán bez udalostí navyše'}</span></div>${categoryLegend()}${balances()}<p class="balance-explain">Čiara sleduje bežný účet. Rezerva a budúce ciele sú osobitne. Ak účet nestačí, čerpá sa dostupná rezerva; ciele sa automaticky nepoužívajú.</p><div id="moment" class="moment" aria-live="polite">${moment()}</div>`;
+  const stage=$('#journey [data-year-scene]');
+  if(playing&&stage?.matches?.('[data-year-scene]')&&$('#journey .scene-actions>.primary')?.getAttribute?.('aria-busy')==='true'){stage.innerHTML=annualContent;return;}
+  $('#journey').innerHTML=`${progress(3)}${title('04 / VÄČŠÍ OBRAZ','A život ide ďalej.','Február až december. Jeden mesiac je skúsenosť. Celý rok ukáže opakovanie.')}<section class="annual-scene" data-year-scene>${annualContent}</section><div class="flow-actions scene-actions"><div>${done?'':'<button class="text-link" data-action="skip">Preskočiť na výsledok</button>'}</div>${done?primary('results','Čo ukázal celý rok?'):primary('play',playing?'Pozastaviť rok':'Pokračovať v roku')}</div>${eventList()}<p class="quiet-note">Jeden ilustračný rok. Rovnaké nastavenie môže v inom roku dopadnúť inak.</p>`;
   if(focusAction)($(`#journey [data-action="${focusAction}"]`)||$('#journey .scene-actions>.primary'))?.focus({preventScroll:true});
  }
  function startYearIntro(){
@@ -126,7 +294,15 @@
   timer=setTimeout(()=>{dialog.close();playing=true;tick();},2600);
  }
  $('#year-intro')?.addEventListener?.('cancel',e=>{e.preventDefault();clearTimeout(timer);$('#year-intro').close();playing=true;tick();});
- function tick(){if(!playing)return;const jan=step==='january',end=jan?30:projection.days.length-1;cursor=Math.min(end,cursor+(jan?1:6));inspected=null;if(cursor===end)stop();scene();if(playing)timer=setTimeout(tick,jan?(projection.days[cursor].events.some(e=>['life','temptation','insured','deviation','income'].includes(e.type))?1400:230):(cursor<90?330:170));}
+ function monthBeat(){
+  if(cursor<0)return 850;
+  const day=projection.days[cursor];
+  const main=run.events.some(e=>e.date===day.date);
+  if(main)return 1800;
+  if(day.events.some(e=>['expense','transfer','known','extraIncome'].includes(e.type)))return 1050;
+  return 700;
+ }
+ function tick(){if(!playing)return;const jan=step==='january',end=jan?30:projection.days.length-1;cursor=Math.min(end,cursor+(jan?1:6));inspected=null;if(cursor===end)stop();scene();if(jan&&cursor<end)pushPayments();if(jan&&cursor===end){window.scrollTo({top:0,behavior:'instant'});$('#month-result-title')?.focus({preventScroll:true});}if(playing)timer=setTimeout(tick,jan?monthBeat():(cursor<90?330:170));}
  function finishReveal(restore=true){
   clearTimeout(revealTimer);flight?.cancel();flight=null;
   const dialog=$('#event-reveal');if(dialog?.open)dialog.close();
@@ -135,42 +311,92 @@
   if(restore)$('#journey .scene-actions>.primary')?.focus({preventScroll:true});
  }
  function revealEvent(){
-  if(revealBusy||revealed>=3)return;
-  const event=presentEvent(run.events.filter(e=>e.date.slice(5,7)==='01')[revealed]);revealed++;
-  if(reduced.matches){scene();$('#journey .scene-actions>.primary')?.focus({preventScroll:true});return;}
-  pendingEvent=event.id;revealBusy=true;scene();
-  const dialog=$('#event-reveal');
-  dialog.innerHTML=`<div class="event-reveal-card"><p class="eyebrow">JANUÁR · ${revealed} / 3</p><div class="big-event-icon">${icon(event.icon,46)}</div><span class="reveal-date">${date(event.date)}</span><h2 id="reveal-title">${esc(event.name)}</h2><strong class="reveal-amount">${event.included||event.type==='covered'?'Navyše 0 €':`− ${money(E.cents(event.amount))}`}</strong><p>${esc(event.text)}</p><span class="reveal-footnote">${event.included?'Už zahrnuté v rozpočte.':'Zatiaľ iba náhľad. Zúčtujeme pri prehratí.'}</span></div>`;
-  dialog.showModal();
-  revealTimer=setTimeout(()=>{
-   const target=$(`[data-event-id="${event.id}"]`),card=$('.event-reveal-card');
-   if(!target||!card){finishReveal();return;}
-   target.scrollIntoView({block:'nearest',behavior:'instant'});
-   const from=card.getBoundingClientRect(),to=target.getBoundingClientRect();
-   const scale=Math.min(1,to.width/from.width,to.height/from.height);
-   flight=card.animate([{transform:'translate(0,0) scale(1)',opacity:1},{transform:`translate(${to.left+to.width/2-from.left-from.width/2}px,${to.top+to.height/2-from.top-from.height/2}px) scale(${scale})`,opacity:.35}],{duration:650,easing:'cubic-bezier(.4,0,.15,1)',fill:'forwards'});
-   flight.onfinish=()=>{finishReveal();target.animate([{transform:'scale(.96)',opacity:.5},{transform:'scale(1)',opacity:1}],{duration:260,easing:'ease-out'});};
-  },3050);
+  if(step!=='january'||cursor>=0||revealBusy||revealed>=3)return;
+  const event=run.events.filter(e=>e.date.startsWith(run.year+'-01'))[revealed];
+  if(!event)return;revealed++;revealBusy=true;showRandomEvent(event);sound?.unlock();sound?.play('reveal');
  }
- $('#event-reveal')?.addEventListener?.('cancel',e=>{e.preventDefault();finishReveal();});
- function showInfo(privacy=false){$('#info-dialog').classList.remove('advice-dialog');if(playing){stop();scene();}$('#info-dialog').innerHTML=`<button class="dialog-close" data-action="close-info" aria-label="Zavrieť">×</button><h2 id="info-title">${privacy?'Tvoje čísla ostávajú u teba.':'Jeden rok. Jasné pravidlá.'}</h2>${privacy?'<p>Údaje, odpoveď aj priebeh sú iba v pamäti tohto prehliadača. Obnovením stránky sa vymažú. Bez analytiky, účtu a odosielania údajov na server. Staršie uložené rozpočty táto verzia nenačítava.</p>':`<ul class="method-list"><li><strong>Pracovné scenáre, nie výskumné odhady</strong>Odpovede zodpovedajú 20 %, 15 %, 10 %, 6 %, 3 % alebo 0 % bežnej spotreby navyše. Ročnú sumu rozdeľujeme medzi mesiace s miernou variabilitou a účtujeme iba cez konkrétne udalosti. Nájom, splátky a sporenie percentá nezvyšujú.</li><li><strong>Život má samostatný plán</strong>Základné životné udalosti a príjmy navyše vznikajú nezávisle od odpovede. Počet doplnkových situácií sa riadi škálou, nejde o reálne pravdepodobnosti. Nových 20 situácií žrebujeme podľa škály: 14, 12, 10, 8, 6 alebo 4 za rok; ich sumy sa pridávajú samostatne. Január je názorný scenár: odpovede 1–2 znamenajú tri výdavky navyše, 3–4 dva a 5–6 jeden plus dva bežné nákupy v pláne. Typy aj poradie sa žrebujú. Nižšia odpoveď môže priniesť drahšiu situáciu. Je to obtiažnosť modelu, nie tvrdenie, že neistota spôsobuje škody.</li><li><strong>Modelové poistenie</strong>Príspevok nad 0 € mesačne zapne plné modelové krytie označených škôd z vytopenia alebo krupobitia. Bežné poruchy a opotrebovanie sa nekryjú. Poistné sa účtuje každý mesiac, pokrytý výdavok má nulový dopad. Bez limitov a spoluúčasti; reálne poistky majú vlastné podmienky.</li><li><strong>Tri zostatky, žiadne vymyslené peniaze</strong>Príjmy a výdavky účtujeme raz. Presun do rezervy nemení spoločný súčet. Presun na budúcnosť nie je spotreba. Presúva sa iba kladný zostatok účtu. Pri nedostatku výdavok pokryje rezerva; ciele sa automaticky nečerpajú. Nekrytý zvyšok je záporný účet, ďalší príjem ho najskôr vyrovná.</li><li><strong>Ilustračné rozloženie</strong>Rok ${run?.year||2027}: mzda už pri začiatku januára a potom vždy 1., fixné platby 5., nepravidelné príjmy 12., známe výdavky 18., rezerva 27. a ciele 28. deň. Spotreba sa rozdelí podľa skutočného počtu dní mesiaca s centovou presnosťou. Príjmy predchádzajú výdavkom v ten istý deň, presuny sú posledné.</li><li><strong>Ten istý rok</strong>Seed: ${run?.seed??'vytvorí sa na začiatku'}. Pri druhom pokuse zostávajú všetky udalosti, dátumy aj sumy. Zníženie limitu nemaže nákupy navyše. Graf zachováva aj denné a vnútrodenné minimá. Zoskupené ikony otvoríš kliknutím.</li><li><strong>Známe platby bez zdvojenia</strong>Označenie „už zahrnuté“ znamená, že výdavok účtuje iba mesačný plán. Zoznam známych platieb ho znova neodpočíta. Bez úrokov, inflácie a modelovania úverov.</li></ul>`}<div class="editor-actions">${primary('close-info','Rozumiem')}</div>`;$('#info-dialog').showModal();}
- document.addEventListener('input',e=>{const t=e.target;if(t.id==='discipline-scale'){haptic(t.value);selectAnswer(t.value);return;}if(!t.dataset.key)return;if(t.type==='range')haptic(t.value);const {key,id,field}=t.dataset;if(t.type==='number'&&(!t.validity.valid||t.value===''))return;const r=key==='initial'?budget.initial:budget[key].find(r=>r.id===id);r[field]=field==='name'?t.value:field==='included'?t.checked:Number(t.value);if(['number','range'].includes(t.type)){const pair=t.closest('.paired-input'),n=pair.querySelector('[type=number]'),slider=pair.querySelector('[type=range]');n.value=r[field];slider.max=key==='income'&&id==='salary'?3000:Math.max(2000,Math.ceil(r[field]/500)*500);slider.value=r[field];slider.style.setProperty('--fill',`${(r[field]-Number(slider.min||0))/(Number(slider.max)-Number(slider.min||0))*100}%`);}updateTotals();});
+ function showRandomEvent(raw){
+  const event=presentEvent(raw),dialog=$('#event-reveal'),covered=event.included||event.type==='covered';
+  dialog.innerHTML=`<div class="event-reveal-card random-event-focus" data-preview-event="${esc(event.id)}"><p class="eyebrow">Tento mesiac nás čaká · ${revealed} / 3</p><div class="random-event-dots" aria-hidden="true">${[1,2,3].map(n=>`<i class="${n<=revealed?'seen':''}"></i>`).join('')}</div><div class="big-event-icon">${icon(event.icon,46)}</div><span class="reveal-date">${date(event.date)}</span><h2 id="reveal-title">${esc(event.name)}</h2><strong class="reveal-amount ${covered?'is-covered':'is-expense'}">${covered?'Navyše 0 €':`− ${money(E.cents(event.amount))}`}</strong><p>${esc(event.text)}</p><span class="reveal-footnote">${covered?'Už zahrnuté v pláne.':'Platba príde počas mesiaca.'}</span><button class="reveal-continue" data-action="next-event">${revealed<3?(previous?'Ďalšia udalosť':'Vylosovať ďalšiu udalosť'):'Prehrať mesiac'} <span aria-hidden="true">→</span></button></div>`;
+  if(!dialog.open)dialog.showModal();else $('.reveal-continue')?.focus({preventScroll:true});
+ }
+ function monthStickers(){
+  const events=run.events.filter(event=>event.date.startsWith(run.year+'-01')).slice(0,revealed);
+  return `<div class="month-stickers">${events.map(raw=>{
+   const event=presentEvent(raw),paid=cursor>=0&&event.date<=projection.days[cursor].date;
+   return `<div class="month-sticker ${paid?'is-paid':''}" data-sticker-id="${esc(event.id)}"><span>${icon(event.icon,20)}</span><div><strong>${esc(event.name)}</strong><small>${date(event.date)}</small></div>${paid?'<span class="sticker-check" aria-label="Zaúčtované">✓</span>':''}</div>`;
+  }).join('')}</div>`;
+ }
+ function nextRandomEvent(){
+  if(!revealBusy||step!=='january'||cursor>=0||flight)return;
+  const card=$('#event-reveal .random-event-focus');
+  const rect=card?.getBoundingClientRect?.();
+  const event=run.events.filter(e=>e.date.startsWith(run.year+'-01'))[revealed-1];
+  $('#event-reveal').close();
+  januaryScene(true);
+  const target=event?$(`[data-sticker-id="${event.id}"]`):null;
+  const proceed=()=>{
+   flight=null;
+   if(revealed<3){revealBusy=false;revealEvent();return;}
+   finishReveal(false);sound?.unlock();playing=true;tick();window.scrollTo({top:0,behavior:'instant'});
+  };
+  if(reduced.matches||!rect||!target?.animate){proceed();return;}
+  const end=target.getBoundingClientRect();
+  const clone=target.cloneNode(true);
+  clone.removeAttribute('data-sticker-id');
+  clone.classList.add('sticker-flight');clone.setAttribute('aria-hidden','true');
+  Object.assign(clone.style,{left:end.left+'px',top:end.top+'px',width:end.width+'px'});
+  document.body.append(clone);
+  target.style.visibility='hidden';
+  const animation=clone.animate([
+   {transform:`translate(${rect.left+rect.width/2-end.left-end.width/2}px,${rect.top+rect.height/2-end.top-end.height/2}px) scale(1.4) rotate(-8deg)`,opacity:.8},
+   {transform:'translate(0,0) scale(1) rotate(0deg)',opacity:1}
+  ],{duration:480,easing:'cubic-bezier(.22,.72,.28,1)'});
+  const cleanup=()=>{clone.remove();target.style.visibility='';};
+  flight={cancel(){animation.cancel();cleanup();}};
+  animation.onfinish=()=>{cleanup();if(step==='january'&&cursor<0&&revealBusy)proceed();};
+ }
+ $('#event-reveal')?.addEventListener?.('cancel',e=>{e.preventDefault();nav(character?'character':'budget');});
+ function showInfo(privacy=false){if(character&&!privacy){if(playing){stop();scene();}$('#info-dialog').classList.remove('advice-dialog');$('#info-dialog').innerHTML=`<button class="dialog-close" data-action="close-info" aria-label="Zavrieť">×</button><h2 id="info-title">Rovnaké podmienky. Iné správanie.</h2><ul class="method-list"><li><strong>Modelové postavy</strong>Príjem, bývanie a košík sú ilustračné. Nie sú to štatistické priemery ani predpoveď.</li><li><strong>Disciplína</strong>Šesť polôh znamená 80 %, 55 %, 30 %, 15 %, 5 % alebo 0 % mesačnej bežnej spotreby navyše. Ide o zámerne výrazné herné scenáre, nie psychologické odhady.</li><li><strong>Dnes alebo zajtra</strong>Po bývaní, telefóne, predplatnom, potravinách a doprave rozdelíme zvyšok medzi radosti a rezervu. Maximum odkladá približne 80 % tohto zvyšku; sumy zaokrúhľujeme na 10 €.</li><li><strong>Rezerva</strong>Predvolene 1 000 €, posuvníkom ju môžeš nastaviť od 0 do 1 000 € po 100 €. Nie je ďalší príjem. Pri nedostatku účtu sa čerpá dostupná rezerva. Nekrytý zvyšok je mínus, nie automatická pôžička. Odkladanie sa účtuje 1. deň a iba z dostupných peňazí.</li><li><strong>Rovnaký mesiac</strong>Pri zmene správania zachovávame životné udalosti a ich dátumy. Mení sa plán spotreby, odkladanie a nákupy nad plán. Nový náhodný rok je samostatná akcia.</li><li><strong>Kruh</strong>Plný kruh predstavuje úvodný zostatok účtu vrátane januárovej mzdy. Mierka sa nemení. Červená označuje chýbajúce financovanie. Rezerva a budúce ciele sú samostatné.</li></ul><div class="editor-actions">${primary('close-info','Rozumiem')}</div>`;$('#info-dialog').showModal();return;}$('#info-dialog').classList.remove('advice-dialog');if(playing){stop();scene();}$('#info-dialog').innerHTML=`<button class="dialog-close" data-action="close-info" aria-label="Zavrieť">×</button><h2 id="info-title">${privacy?'Tvoje čísla ostávajú u teba.':'Jeden rok. Jasné pravidlá.'}</h2>${privacy?'<p>Údaje, odpoveď aj priebeh sú iba v pamäti tohto prehliadača. Obnovením stránky sa vymažú. Bez analytiky, účtu a odosielania údajov na server. Staršie uložené rozpočty táto verzia nenačítava.</p>':`<ul class="method-list"><li><strong>Pracovné scenáre, nie výskumné odhady</strong>Odpovede zodpovedajú 20 %, 15 %, 10 %, 6 %, 3 % alebo 0 % bežnej spotreby navyše. Ročnú sumu rozdeľujeme medzi mesiace s miernou variabilitou a účtujeme iba cez konkrétne udalosti. Nájom, splátky a sporenie percentá nezvyšujú.</li><li><strong>Život má samostatný plán</strong>Základné životné udalosti a príjmy navyše vznikajú nezávisle od odpovede. Počet doplnkových situácií sa riadi škálou, nejde o reálne pravdepodobnosti. Nových 20 situácií žrebujeme podľa škály: 14, 12, 10, 8, 6 alebo 4 za rok; ich sumy sa pridávajú samostatne. Január je názorný scenár: odpovede 1–2 znamenajú tri výdavky navyše, 3–4 dva a 5–6 jeden plus dva bežné nákupy v pláne. Typy aj poradie sa žrebujú. Nižšia odpoveď môže priniesť drahšiu situáciu. Je to obtiažnosť modelu, nie tvrdenie, že neistota spôsobuje škody.</li><li><strong>Modelové poistenie</strong>Príspevok nad 0 € mesačne zapne plné modelové krytie označených škôd z vytopenia alebo krupobitia. Bežné poruchy a opotrebovanie sa nekryjú. Poistné sa účtuje každý mesiac, pokrytý výdavok má nulový dopad. Bez limitov a spoluúčasti; reálne poistky majú vlastné podmienky.</li><li><strong>Tri zostatky, žiadne vymyslené peniaze</strong>Príjmy a výdavky účtujeme raz. Presun do rezervy nemení spoločný súčet. Presun na budúcnosť nie je spotreba. Presúva sa iba kladný zostatok účtu. Pri nedostatku výdavok pokryje rezerva; ciele sa automaticky nečerpajú. Nekrytý zvyšok je záporný účet, ďalší príjem ho najskôr vyrovná.</li><li><strong>Ilustračné rozloženie</strong>Rok ${run?.year||2027}: mzda už pri začiatku januára a potom vždy 1., fixné platby 6., nepravidelné príjmy 12., známe výdavky 18., rezerva 1. a ciele 28. deň. Spotreba sa rozdelí podľa skutočného počtu dní mesiaca s centovou presnosťou. Príjmy predchádzajú výdavkom v ten istý deň, presuny sú posledné.</li><li><strong>Ten istý rok</strong>Seed: ${run?.seed??'vytvorí sa na začiatku'}. Pri druhom pokuse zostávajú všetky udalosti, dátumy aj sumy. Zníženie limitu nemaže nákupy navyše. Graf zachováva aj denné a vnútrodenné minimá. Zoskupené ikony otvoríš kliknutím.</li><li><strong>Známe platby bez zdvojenia</strong>Označenie „už zahrnuté“ znamená, že výdavok účtuje iba mesačný plán. Zoznam známych platieb ho znova neodpočíta. Bez úrokov, inflácie a modelovania úverov.</li></ul>`}<div class="editor-actions">${primary('close-info','Rozumiem')}</div>`;$('#info-dialog').showModal();}
+ document.addEventListener('input',e=>{
+  const t=e.target,k=t.dataset?.characterField;
+  if(k){
+   if(k==='income'||t.value===''||t.validity?.valid===false)return;
+   if(t.type==='range')haptic(t.value);
+   const value=Number(t.value);
+   if(k==='reserve'){
+    characterReserve=Math.max(0,Math.min(1000,Math.round(value/100)*100));
+    t.value=characterReserve;
+    $('#character-reserve-value').textContent=money(E.cents(characterReserve));
+    $('#character-reserve-shield').style.setProperty('--reserve-level',characterReserve/1000);
+    t.setAttribute?.('aria-valuetext',money(E.cents(characterReserve)));
+   }else{
+    traits[k]=value;
+    answer=traits.discipline;
+    $('#discipline-label').innerHTML=characterAnswers[traits.discipline-1];
+   }
+   if(t.style)t.style.setProperty('--fill',((Number(t.value)-Number(t.min))/(Number(t.max)-Number(t.min))*100)+'%');
+   updateCharacterSummary(k);
+   return;
+  }
+  if(t.id==='discipline-scale'){haptic(t.value);selectAnswer(t.value);return;}if(!t.dataset.key)return;if(t.type==='range')haptic(t.value);const {key,id,field}=t.dataset;if(t.type==='number'&&(!t.validity.valid||t.value===''))return;const r=key==='initial'?budget.initial:budget[key].find(r=>r.id===id);r[field]=field==='name'?t.value:field==='included'?t.checked:Number(t.value);if(['number','range'].includes(t.type)){const pair=t.closest('.paired-input'),n=pair.querySelector('[type=number]'),slider=pair.querySelector('[type=range]');n.value=r[field];slider.max=key==='income'&&id==='salary'?3000:Math.max(2000,Math.ceil(r[field]/500)*500);slider.value=r[field];slider.style.setProperty('--fill',`${(r[field]-Number(slider.min||0))/(Number(slider.max)-Number(slider.min||0))*100}%`);}updateTotals();});
  document.addEventListener('submit',e=>{if(e.target.id!=='annual-budget')return;e.preventDefault();if(editing)launch(true);else nav('question');});
  document.addEventListener('keydown',e=>{if(e.target.matches('g[data-action]')&&['Enter',' '].includes(e.key)){e.preventDefault();e.target.dispatchEvent(new MouseEvent('click',{bubbles:true}));}});
  document.addEventListener('click',e=>{if(e.target.id==='discipline-scale'){haptic(e.target.value);selectAnswer(e.target.value);return;}const b=e.target.closest('[data-action]');if(!b)return;const a=b.dataset.action;
-  if(a==='home')nav('welcome');else if(a==='begin'||a==='edit-before')nav('budget');
+  if(a==='sound'){sound?.toggle();januaryScene(true);}else if(a==='preset'){const preset=presets.find(p=>p.id===b.dataset.preset);if(!preset||step!=='character')return;traits={discipline:preset.discipline,future:preset.future};characterForm();$(`[data-preset="${preset.id}"]`)?.focus({preventScroll:true});}else if(a==='gender'){if(step!=='welcome')return;const p=BudgetCharacters.profiles.find(p=>p.id===b.dataset.character);if(!p||!p.variants[b.dataset.gender])return;genders[p.id]=b.dataset.gender;welcome();document.querySelector(`[data-action="gender"][data-character="${p.id}"][data-gender="${b.dataset.gender}"]`)?.focus();}else if(a==='home')nav('welcome');else if(a==='open-character-picker'&&step==='character')openCharacterPicker();else if(a==='close-character-picker')$('#character-picker').close();else if(a==='choose-character'){const p=BudgetCharacters.profiles.find(p=>p.id===b.dataset.character);if(!p||(step==='character'&&p.id===character))return;const picker=$('#character-picker');if(picker.open)picker.close();attempt=1;character=p.id;characterIncome=p.income;characterReserve=1000;traits={discipline:4,future:50};characterSeed=null;run=null;previous=null;editing=false;nav('character');}else if(a==='character-start'){sound?.unlock();if([...document.querySelectorAll('[data-character-field]')].some(input=>!input.reportValidity()))return;launch();}else if(a==='character-retry'){previous=projection;attempt++;editing=true;nav('character');if(['discipline','future'].includes(b.dataset.focus))$('#character-'+b.dataset.focus)?.focus({preventScroll:false});}else if(a==='begin'){attempt=1;character=null;budget=Y.defaults();answer=null;run=null;previous=null;editing=false;nav('budget');}else if(a==='edit-before')nav(character?'character':'budget');
   else if(a==='add'){const {key}=b.dataset;budget[key].push({id:crypto.randomUUID(),name:'Vlastná položka',amount:0,month:0,included:false});const open=[...document.querySelectorAll('.budget-group')].map(d=>d.open);form();document.querySelectorAll('.budget-group').forEach((d,i)=>d.open=open[i]);}
   else if(a==='remove'){const {key,id}=b.dataset;budget[key]=budget[key].filter(r=>r.id!==id);b.closest('.budget-row').remove();updateTotals();}
   else if(a==='clear'){for(const key of ['income','fixed','insurance','consumption','saving','goals','irregular','known'])for(const r of budget[key])r.amount=0;budget.initial={checking:0,reserve:0,future:0};budget.income[0].amount=750;form();}
-  else if(a==='start-year')launch(!!run&&run.answer===answer);else if(a==='reveal')revealEvent();else if(a==='finish-reveal')finishReveal();
-  else if(a==='play'){if(playing){stop();scene();}else if(reduced.matches){cursor=step==='january'?30:projection.days.length-1;scene();}else {playing=true;tick();}}
-  else if(a==='skip'){stop();cursor=step==='january'?30:projection.days.length-1;scene();}
-  else if(a==='restart'){stop();cursor=step==='january'?-1:30;inspected=null;scene();}
+  else if(a==='start-year'){sound?.unlock();launch(!!run&&run.answer===answer);}else if(a==='next-event')nextRandomEvent();else if(a==='reveal')revealEvent();else if(a==='finish-reveal')nextRandomEvent();
+  else if(a==='play'){if(step==='january'&&(revealBusy||revealed<3))return;sound?.unlock();const starting=cursor<0;if(playing){stop();scene();}else if(reduced.matches){cursor=step==='january'?30:projection.days.length-1;scene();}else {playing=true;tick();}if(starting)window.scrollTo({top:0,behavior:'instant'});}
+  else if(a==='skip'){stop();cursor=step==='january'?30:projection.days.length-1;scene();window.scrollTo({top:0,behavior:'instant'});$('#month-result-title')?.focus({preventScroll:true});}
+  else if(a==='restart'){stop();sound?.unlock();cursor=step==='january'?-1:30;lastPaymentDay=null;inspected=null;scene();if(!reduced.matches){playing=true;tick();}}
   else if(a==='rest')startYearIntro();
-  else if(a==='results')nav('result');else if(a==='retry'){previous=projection;editing=true;nav('budget');}else if(a==='new-year'){previous=null;run=null;launch();}
+  else if(a==='results')nav('result');else if(a==='retry'){previous=projection;attempt++;editing=true;nav(character?'character':'budget');}else if(a==='new-year'){attempt=1;previous=null;run=null;characterSeed=null;launch();}
   else if(a==='inspect'){inspected=Number(b.dataset.day);const dates=b.dataset.dates?.split(',');const detail=dates?dates.map(d=>`<strong>${date(d)}</strong> `+summarizeEvents(projection.ledger.filter(e=>e.date===d)).map(e=>`${esc(e.name)}: ${money(e.amount)}${e.type==='transfer'||e.type==='reserveDraw'?' (presun)':''}`).join(' · ')).join('<br>'):moment();$('#moment').innerHTML=(step==='january'&&inspected>cursor?'Náhľad, zatiaľ nezúčtované: ':'')+detail;$('#moment').scrollIntoView({block:'nearest',behavior:'instant'});}
   else if(a==='advice')showAdvice(b.dataset.advice);else if(a==='help'||a==='privacy')showInfo(a==='privacy');else if(a==='close-info')$('#info-dialog').close();
  });
+ document.addEventListener('toggle',e=>{if(e.target.isConnected===false)return;const key=e.target.dataset?.monthDisclosure;if(key==='events')eventCardsOpen=e.target.open;if(key==='rules')monthRulesOpen=e.target.open;if(key==='transfers')receiptTransfersOpen=e.target.open;},true);
  document.addEventListener('visibilitychange',()=>{if(document.hidden&&playing){stop();scene();}});
  reduced.addEventListener('change',()=>{if(reduced.matches&&revealBusy)finishReveal();if(reduced.matches&&playing){stop();cursor=step==='january'?30:projection.days.length-1;scene();}});
  let resize;window.addEventListener('resize',()=>{clearTimeout(resize);resize=setTimeout(()=>{if(['january','year','result'].includes(step))scene();},120);});render();

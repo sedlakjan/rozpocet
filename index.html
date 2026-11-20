@@ -11,10 +11,20 @@
   <link rel="stylesheet" href="styles.css">
   <link rel="stylesheet" href="mobile-polish.css">
   <link rel="stylesheet" href="final-screen.css">
+  <link rel="stylesheet" href="characters.css">
+  <link rel="stylesheet" href="experience.css">
+  <link rel="stylesheet" href="receipt.css">
+  <link rel="stylesheet" href="journey.css">
+  <link rel="stylesheet" href="flow.css">
   <script src="engine.js" defer></script>
   <script src="events.js" defer></script>
   <script src="year-engine.js" defer></script>
   <script src="final-content.js" defer></script>
+  <script src="characters.js" defer></script>
+  <script src="receipt.js" defer></script>
+  <script src="receipt-counter.js" defer></script>
+  <script src="journey-insights.js" defer></script>
+  <script src="simulation-sound.js" defer></script>
   <script src="app.js" defer></script>
 </head>
 <body>
@@ -23,13 +33,16 @@
     <header class="topbar">
       <button class="brand" data-action="home" aria-label="5PEŇAZÍ · úvod"><img src="assets/5penazi-nbs.png" alt="5PEŇAZÍ · NBS" width="226" height="28"></button>
       <span class="brand-divider"></span><span class="product-name">Rozpočet naživo</span>
-      <button class="help-button" data-action="help"><span class="info-icon" aria-hidden="true">i</span><span>Ako to funguje</span></button>
     </header>
     <main id="journey"></main>
-    <footer><span>Rozumieť peniazom sa dá aj skúsenosťou.</span><div><span class="footer-dot"></span> Všetky výpočty prebiehajú v tvojom prehliadači<button data-action="privacy">Súkromie</button></div></footer>
+    <footer>
+      <span>Rozumieť peniazom sa dá aj skúsenosťou.</span>
+      <div><span class="footer-dot"></span> Všetky výpočty prebiehajú v tvojom prehliadači<button data-action="privacy">Súkromie</button></div>
+    </footer>
   </div>
   <dialog id="editor" aria-labelledby="editor-title"></dialog>
   <dialog id="info-dialog" aria-labelledby="info-title"></dialog>
+  <dialog id="character-picker" aria-labelledby="character-picker-title"></dialog>
   <dialog id="event-reveal" class="event-reveal" aria-labelledby="reveal-title"></dialog>
   <dialog id="year-intro" class="year-intro" aria-labelledby="year-intro-title"></dialog>
   <div id="toast" class="toast" role="status"></div>

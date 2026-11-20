@@ -7,6 +7,6 @@
     "start": "node server.cjs",
     "start:lan": "node server.cjs --lan",
     "test": "node --test tests/*.test.cjs",
-    "check": "node --check engine.js && node --check events.js && node --check year-engine.js && node --check final-content.js && node --check app.js && node --check server.cjs"
+    "check": "node --check engine.js && node --check events.js && node --check year-engine.js && node --check final-content.js && node --check characters.js && node --check receipt.js && node --check simulation-sound.js && node --check journey-insights.js && node --check receipt-counter.js && node --check app.js && node --check server.cjs"
   }
 }
